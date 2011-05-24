@@ -2,6 +2,12 @@
 
 A collection of my X-plane python plugins.
 
+In order to use the plugins you need to install [sandy's python interface](http://www.xpluginsdk.org/python_interface_sdk100_downloads.htm)
+Create a folder named **PythonScripts** in your *X-plane/Resources/plugins* folder and move the .py files into.
+If you're using windows or an old osx version you must also install [Python 2.6.6](http://www.python.org/download/releases/2.6.6/)
+
+All the scripts are released under the terms of the GNU General Public License.
+
 ## Fast Plan - rfinder to FMC
 
 If you don't have time to make your own flight-plans and program the x-plane FMC. You should try this tool.
