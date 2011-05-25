@@ -34,18 +34,19 @@ Read and edit the included .ini file to specify dataref values to be logged and 
 
 It can be useful to plane makers and test pilots.
 
-## Weight & Fuel Profiles 
+## Weight & Fuel: Profiles and Set by numbers 
 
-Allows storing the current Weight and Fuel in profiles.
+Allows storing the current Weight and Fuel in profiles and provides a alternative dialog for setting W&F by numbers (without sliders) 
 
 ### Features:
 
 * Per aircraft config.
 * Unlimited profiles.
 * Can be easily modified to store any kind of dataref into profiles.
+* # of tanks auto-detection
 
 ### Usage:
-Set Weight and Fuel in the Aircraft menu.
+Set Weight and Fuel in the Aircraft menu or with the provided W&F dialog.
 Go to the plugins menu -> W & Fuel Profiles -> New Profile
 Type a name for your profile and click save (click on the default checkbox to load this profile each time you load the plane)
 
