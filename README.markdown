@@ -25,8 +25,12 @@ If you have UFMC installed a **to UFMC** button will appear to save the fetched 
 ### Changes
 I realized that x-plane can handle 100 FMS navpoints :)
 Auto compression of plans with more than 100 fixes
-UFMC support by popular request
+UFMC/x737FMC support by popular request
 
+### UFMC/x737FMC Notes
+To load the generated flightplan to the UFMC go to MCDU, <POS, ROUTE>, type ORIGDEST (ex: LEBLLFOV),  CO ROUTE, EXEC
+You should have the last navadata installed in to x-plane (reffer to the UFMC manual).
+You can also import the current XP FMC route to UFMC: MDCU, NAV DATA>, EXEC. (this is the safest way with outdated navdata)
 
 ## PI_CSV_logger Script
 
