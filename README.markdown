@@ -14,14 +14,18 @@ If you don't have time to make your own flight-plans and program the x-plane FMC
 
 Just enter your departure and destination airports and FastPlan will find a route using http://rfinder.asalink.net/free/ and program your FMC.
 
+If you have UFMC installed a **to UFMC** button will appear to save the fetched plan to the *Resources/plugins/FJCC_FMC/FlightPlans* folder
+
 ### Limitations:
 * Routes with more than 100 points doesn't fit the x-plane FMC. FastPlan will try to compress large routes.
 * FastPlan doesn't plan climb and descent, Vertical Navigation is on your hands. No SID/STAR.
+* The plan should be loaded into the UFMC by hand (loaded not typed :) 
 * You need an internet connection :)
 
 ### Changes
 I realized that x-plane can handle 100 FMS navpoints :)
-Auto compression of plans with more than 100 fixes  
+Auto compression of plans with more than 100 fixes
+UFMC support by popular request
 
 
 ## PI_CSV_logger Script
@@ -36,7 +40,7 @@ It can be useful to plane makers and test pilots.
 
 ## Weight & Fuel: Profiles and Set by numbers 
 
-Allows storing the current Weight and Fuel in profiles and provides a alternative dialog for setting W&F by numbers (without sliders) 
+Allows storing the current Weight and Fuel in profiles and provides an alternative dialog for setting W&F by numbers (without sliders) 
 
 ### Features:
 
