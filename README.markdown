@@ -8,6 +8,19 @@ If you're using windows or an old osx version you must also install [Python 2.6.
 
 All the scripts are released under the terms of the GNU General Public License.
 
+## Ground Services - Under Developement
+Provides ground services with animations using OpenSceneryX objects.
+
+### Provided services
+* PushBack
+* Refueling
+* GPU/Stairs (animation only)
+
+### Installation
+Requires [OpenSceneryX](http://www.opensceneryx.com/)
+
+Please send me your comments and suggestions.
+
 ## Fast Plan - rfinder to FMC
 
 If you don't have time to make your own flight-plans and program the x-plane FMC. You should try this tool.
