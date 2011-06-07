@@ -79,18 +79,6 @@ GPU_OBJ='Custom Scenery/OpenSceneryX/objects/airport/vehicles/gpus/1/object.obj'
 #Tug rudder offset
 TUG_OFFSET=4.2
 
-#
-# Datarefs to store 
-#
-# Modify the following dict to add more datarefs to store in your profiles
-#
-DATAREFS = {
-            'Payload':      'sim/flightmodel/weight/m_fixed',
-            'Fuel tanks':   'sim/flightmodel/weight/m_fuel[0:9]',
-            'jettison':     'sim/flightmodel/weight/m_jettison',
-            'JATO':         'sim/flightmodel/misc/jato_left'
-            }
-
 class PythonInterface:
     def XPluginStart(self):
         self.Name = "GroundServices - " + VERSION
@@ -116,25 +104,16 @@ class PythonInterface:
         
         self.tailnum = ''
         
-        self.values = {}
-        
-        # Init datarefs
-        for key in DATAREFS: self.values[key] = EasyDref(DATAREFS[key])
-        
-        # Init fuel datarefs 
-        self.fuel = self.values['Fuel tanks']
-        self.drPayLoad = self.values['Payload']
-        self.drNFuelTanks = EasyDref('sim/aircraft/overflow/acf_num_tanks(int)')
-        
         # Main floop
-        self.floop = self.floopCallback
-        XPLMRegisterFlightLoopCallback(self, self.floop, 0, 0)
+        self.RefuelFloopCB = self.RefuelCallback
+        XPLMRegisterFlightLoopCallback(self, self.RefuelFloopCB, 0, 0)
         
         # Push back callback
         self.PushbackCB = self.pushBackCallback
         XPLMRegisterFlightLoopCallback(self, self.PushbackCB, 0, 0)
         
-        self.acf = AircrafPosition()
+        # Aicraft data access
+        self.acf = Aircraft()
         
         # Scenery objects
         self.pos , self.truck, self.tug, self.stairs, self.bus, self.gpu = tuple([False]) * 6
@@ -143,17 +122,25 @@ class PythonInterface:
 
         return self.Name, self.Sig, self.Desc
 
-    def destroyObjects(self):
+    def reset(self):
+        '''
+        Resets all animations, actions and windows
+        '''
+        if (self.reFuelWindow):
+            XPDestroyWidget(self, self.ReFuelWindowWidget, 1)
+        # Stop pushback
+        XPLMSetFlightLoopCallbackInterval(self, self.PushbackCB, 0, 0, 0)
+        # Stop Refuel
+        XPLMSetFlightLoopCallbackInterval(self, self.RefuelFloopCB, 0, 0, 0)
         # Destroy all objects
         SceneryObject.destroyAll()
         self.pos , self.truck, self.tug, self.stairs, self.bus, self.gpu = tuple([False]) * 6
 
     def XPluginStop(self):
-        self.destroyObjects()
-        XPLMUnregisterFlightLoopCallback(self, self.floop, 0)
+        self.reset()
+        XPLMUnregisterFlightLoopCallback(self, self.RefuelFloopCB, 0)
+        XPLMUnregisterFlightLoopCallback(self, self.PushbackCB, 0)
         XPLMDestroyMenu(self, self.mMain)
-        if (self.reFuelWindow):
-            XPDestroyWidget(self, self.FuelWindowWidget, 1)
         pass
         
     def XPluginEnable(self):
@@ -165,16 +152,11 @@ class PythonInterface:
     def XPluginReceiveMessage(self, inFromWho, inMessage, inParam):
         if (inFromWho == XPLM_PLUGIN_XPLANE):
             if (inFromWho == XPLM_PLUGIN_XPLANE and inParam == XPLM_PLUGIN_XPLANE):# On aircraft change
-                self.destroyObjects()
-                self.CancelRefuel()
-                # Destroy refuel window
-                if self.reFuelWindow:
-                    XPDestroyWidget(self, self.ReFuelWindowWidget, 1)
-                    self.reFuelWindow = False
+                self.reset()
                 self.tailnum = self.acf.tailNumber.value[0]
             # On plane load
             if (inParam == XPLM_PLUGIN_XPLANE and inMessage == XPLM_MSG_AIRPORT_LOADED ): # On aiport load
-                self.destroyObjects()
+                self.reset()
                 plane, plane_path = XPLMGetNthAircraftModel(0)
         
     def mainMenuCB(self, menuRef, menuItem):
@@ -213,7 +195,7 @@ class PythonInterface:
 
     def CreateReFuelWindow(self, x, y, w, h):
         # Get number of fuel tanks
-        self.nFuelTanks = self.drNFuelTanks.value
+        self.nFuelTanks = self.acf.nFuelTanks.value
         
         x2 = x + w
         y2 = y - h - self.nFuelTanks * 20 
@@ -276,21 +258,21 @@ class PythonInterface:
                     self.truck.show()
                 
                 XPLMSpeakString('%s Starting refuel' % self.tailnum)
-                XPLMSetFlightLoopCallbackInterval(self, self.floop, CINTERVAL, 0, 0)
+                XPLMSetFlightLoopCallbackInterval(self, self.RefuelFloopCB, CINTERVAL , 0, 0)
                 return 1
             if (inParam1 == self.CancelReFuelButton):
                 XPLMSpeakString('%s Refueling canceled' % self.tailnum)
                 self.CancelRefuel()
         return 0
     
-    def floopCallback(self, elapsedMe, elapsedSim, counter, refcon):
+    def RefuelCallback(self, elapsedMe, elapsedSim, counter, refcon):
         '''
         Refuel Callback
         '''
         if self.refuel and sum(self.refuel) > 0:
             #ignore first call
             if elapsedMe > CINTERVAL * 4: return CINTERVAL
-            tank = self.fuel.value
+            tank = self.acf.fuelTanks.value
             
             for i in range(len(self.refuel)):
                 if self.refuel[i] > 0: 
@@ -303,7 +285,7 @@ class PythonInterface:
             self.refuel[i]-= toFuel
             tank[i] += toFuel
             
-            self.fuel.value = tank
+            self.acf.fuelTanks.value = tank
             
             return CINTERVAL
         else:
@@ -347,7 +329,7 @@ class PythonInterface:
         self.refuel = False;
         if self.truck:
             self.fuelTruck('go')
-        XPLMSetFlightLoopCallbackInterval(self, self.floop, 0, 0, 0)
+        XPLMSetFlightLoopCallbackInterval(self, self.RefuelFloopCB, 0, 0, 0)
         if self.reFuelWindow:
             XPHideWidget(self.CancelReFuelButton)
             XPShowWidget(self.ReFuelButton)
@@ -511,11 +493,17 @@ class PythonInterface:
 '''
 Includes
 '''
-class AircrafPosition:
+class Aircraft:
     '''
-    Aircraft position and utilities
+    Aircraft data, position and other utilities
     '''
     def __init__(self):
+        
+        self.payLoad    = EasyDref('sim/flightmodel/weight/m_fixed')
+        self.fuelTanks  = EasyDref('sim/flightmodel/weight/m_fuel[0:9]')
+        self.jettison   = EasyDref('sim/flightmodel/weight/m_jettison')
+        self.jato       = EasyDref('sim/flightmodel/misc/jato_left')
+        self.nFuelTanks = EasyDref('sim/aircraft/overflow/acf_num_tanks(int)')
         
         #Tail number
         self.tailNumber = EasyDref('sim/aircraft/view/acf_tailnum[0:40]', 'bit')
@@ -554,6 +542,11 @@ class AircrafPosition:
         # Gear deflection
         self.gearHeading = EasyDref('sim/flightmodel2/gear/gear_heading_deg[0:3]', 'float')
         
+        #
+        # yoke
+        # sim/joystick/yolk_heading_ratio
+        #
+        
         # Gear position
         #self.gear = EasyDref('sim/aircraft/parts/acf_gear_znodef[0:10]', 'float')
         #self.gear = EasyDref('sim/aircraft/parts/acf_Zarm[0:10]', 'float')
@@ -575,7 +568,7 @@ class AircrafPosition:
     def getGearcCoord(self, dist = TUG_OFFSET):
         h = self.gear.value
         h.sort()
-        h = h[0]*-1 + dist #+ 2 # tug gear separation
+        h = h[0]*-1 + dist # tug gear separation
         
         pos = self.getPointAtHdg(h)
         
@@ -586,6 +579,8 @@ class AircrafPosition:
         psi = 90
         if pos[0] > 0: psi = 270
         pos[0] -= dist * pos[0]**0
+        # BUG Ivented Y
+        pos[2] *= -1
         pos = self.getPointAtRel(pos)
         pos[4] = self.psi.value +psi%360
         
@@ -594,6 +589,7 @@ class AircrafPosition:
     def getPointAtHdg(self, dist, hdg = 0, orig = False):
         '''
         Return a point at a given distance and heading
+        BUG: inverted Z and heading
         '''
         if not orig:
             orig = self.get()
@@ -610,9 +606,43 @@ class AircrafPosition:
         return orig
     
     def getPointAtRel(self, pos, orig = False):
+        '''
+        Get a point relative to the aircraft or orig
+        '''
+        #self.planeToLocal(pos, orig)
+        
         p1 = self.getPointAtHdg(pos[0], 90, orig)
         return self.getPointAtHdg(pos[2], 0, p1)
 
+    def planeToLocal(self, pos, orig = False):
+        '''
+        Copy paste from http://www.xsquawkbox.net/xpsdk/mediawiki/ScreenCoordinates
+        TODO: use it
+        '''
+        #INPUTS: (x_plane,y_plane,z_plane) = source location in airplane coordinates.  
+        #phi = roll, psi = heading, the = pitch.  
+        #(local_x, local_y, local_z) = plane's location in the world 
+        #OUTPUTS:(x_wrl, y_wrl, z_wrl) = transformed location in world.
+        if not orig:
+            orig = self.get()
+        
+        x_plane, y_plane, z_plane, phi, psi, the = tuple(pos)
+        local_x, local_y, local_z, lphi, lpsi, lthe = tuple(orig)
+    
+        x_phi=x_plane*cos(phi) + y_plane*sin(phi)
+        y_phi=y_plane*cos(phi) - x_plane*sin(phi)
+        z_phi=z_plane
+        
+        x_the=x_phi
+        y_the=y_phi*cos(the) - z_phi*sin(the)
+        z_the=z_phi*cos(the) + y_phi*sin(the)
+        
+        x_wrl=x_the*cos(psi) - z_the*sin(psi) + local_x
+        y_wrl=y_the                           + local_y
+        z_wrl=z_the*cos(psi) + x_the*sin(psi) + local_z
+        
+        return [x_wrl, y_wrl, z_wrl, phi, psi, the]
+    
 class SceneryObject:
     '''
     Loads and draws an object in a specified position
@@ -721,6 +751,7 @@ class SceneryObject:
         elif self.time > ANIM_RATE:
             pos = [self.x, self.y, self.z, self.theta, self.psi, self.phi]
             pos[0] += (self.goTo[0] - pos[0]) / self.time * ANIM_RATE
+            # No vertical animation
             #pos[1] += (self.goTo[1] - pos[1]) / self.time * ANIM_RATE
             pos[2] += (self.goTo[2] - pos[2]) / self.time * ANIM_RATE
             
@@ -812,7 +843,7 @@ class SceneryObject:
         for obj in self.objects[:]:
             obj.destroy()
         if self.drawing:
-            XPLMUnregisterDrawCallback(SceneryObject.plugin, self.DrawCB, xplm_Phase_Objects, 0, 0)
+            XPLMUnregisterDrawCallback(SceneryObject.plugin, SceneryObject.DrawCB, xplm_Phase_Objects, 0, 0)
             self.drawing = False
 
 class EasyDref:    
