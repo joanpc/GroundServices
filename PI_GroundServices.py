@@ -57,28 +57,96 @@ GAL2LIT=3.78541178
 RFLOW=900.0
 
 #Callback interval
-CINTERVAL=0.2
+REFUEL_INTERVAL=0.2
 
 # Animation rate
+# 0.04 = 25FPS,  0.05 = 20FPS...
 ANIM_RATE=0.04
 
-# l/kg
+#  kg/l
 JETADENSITY=0.8
+AVGASDENSITY=0.721
 
 
 #Flow in kg/min
 RFLOW=RFLOW*GAL2LIT*JETADENSITY
 
-# Scenery Objects
-TRUCK_OBJ='Custom Scenery/OpenSceneryX/objects/airport/vehicles/fuel/medium/%i/object.obj' % randint(1,9)
-TUG_OBJ='Custom Scenery/OpenSceneryX/objects/airport/vehicles/tugs/large/%i/object.obj' % randint(1,4)
-STAIR_OBJ='Custom Scenery/OpenSceneryX/objects/airport/vehicles/stairs/1/object.obj'
-BUS_OBJ='Custom Scenery/OpenSceneryX/objects/airport/vehicles/busses_coaches/minibusses/swissport/1/object.obj'
-GPU_OBJ='Custom Scenery/OpenSceneryX/objects/airport/vehicles/gpus/1/object.obj'
+GPM2KPM=GAL2LIT*JETADENSITY
 
 #Tug rudder offset
 TUG_OFFSET=4.2
 
+
+
+OBJ_PATH = 'Custom Scenery/OpenSceneryX/objects/airport/vehicles/'
+
+class Empty:
+    # an empty class for assigning values
+    pass
+
+class Config:
+    
+    #Avaliable objects
+    T_SMALL = OBJ_PATH + 'tugs/small/%i/object.obj' % randint(1,2)
+    T_MEDIUM = OBJ_PATH + 'tugs/large/4/object.obj'
+    T_LARGE = OBJ_PATH + 'tugs/large/%i/object.obj' % randint(1,3)
+    T_MILI  = OBJ_PATH + 'tugs/military/1/object.obj'
+    
+    F_LARGE = OBJ_PATH + 'fuel/large/%i/object.obj' % randint(1,8)
+    F_MEDIUM   = OBJ_PATH + 'fuel/medium/%i/object.obj' % randint(1,9)
+    F_SMALL = OBJ_PATH + 'fuel/small/1/object.obj'
+
+    # Class defaults
+    defaults = { 'AB':    { 'tug':    T_LARGE,
+                           'truck':   F_LARGE,
+                           'flow':   800,
+                          },
+                'CD':     { 'tug':    T_MEDIUM,
+                           'truck':   F_MEDIUM,
+                           'flow':   600,
+                          },
+                 'E':     { 'tug':    T_SMALL,
+                           'truck':   F_MEDIUM,
+                           'flow':   400,
+                          },
+                 'F':     { 'tug':    T_SMALL,
+                           'truck':   F_SMALL,
+                           'flow':   50,
+                          },
+                }
+
+    def __init__(self, plugin):
+        
+        self.plugin = plugin
+        # Defaults
+        # Scenery Objects
+        self.obj = Empty()
+        
+        self.obj.truck  = self.defaults['E']['truck']
+        self.obj.tug    = self.defaults['E']['tug']
+        self.flow       = self.defaults['E']['flow'] * GPM2KPM
+
+        self.obj.stairs = OBJ_PATH + 'stairs/1/object.obj'
+        self.obj.bus    = OBJ_PATH + 'busses_coaches/minibusses/swissport/1/object.obj'
+        self.obj.gpu    = OBJ_PATH + 'gpus/1/object.obj'
+    
+    
+    def getConfig(self, acfClass = False):
+        '''
+        Todo, get config..
+        '''
+        if acfClass:
+            for k in self.defaults:
+                print acfClass, k
+                if k in acfClass:
+                    self.obj.truck  = self.defaults[k]['truck']
+                    self.obj.tug    = self.defaults[k]['tug']
+                    self.flow       = self.defaults[k]['flow'] * GPM2KPM
+                    print self.defaults[k]
+                    break
+        pass
+        
+        
 class PythonInterface:
     def XPluginStart(self):
         self.Name = "GroundServices - " + VERSION
@@ -117,8 +185,10 @@ class PythonInterface:
         
         # Scenery objects
         self.pos , self.truck, self.tug, self.stairs, self.bus, self.gpu = tuple([False]) * 6
-        
         self.stairStatus, self.gpuStatus = False, False
+        
+        # Init config
+        self.conf = Config(self)
 
         return self.Name, self.Sig, self.Desc
 
@@ -128,6 +198,7 @@ class PythonInterface:
         '''
         if (self.reFuelWindow):
             XPDestroyWidget(self, self.ReFuelWindowWidget, 1)
+            self.reFuelWindow = False
         # Stop pushback
         XPLMSetFlightLoopCallbackInterval(self, self.PushbackCB, 0, 0, 0)
         # Stop Refuel
@@ -154,6 +225,7 @@ class PythonInterface:
             if (inFromWho == XPLM_PLUGIN_XPLANE and inParam == XPLM_PLUGIN_XPLANE):# On aircraft change
                 self.reset()
                 self.tailnum = self.acf.tailNumber.value[0]
+                self.conf.getConfig(self.acf.getClass())
             # On plane load
             if (inParam == XPLM_PLUGIN_XPLANE and inMessage == XPLM_MSG_AIRPORT_LOADED ): # On aiport load
                 self.reset()
@@ -166,7 +238,7 @@ class PythonInterface:
         if menuItem == 1:
             self.fuelTruck('come')
             if (not self.reFuelWindow):
-                 self.CreateReFuelWindow(221, 640, 220, 75)
+                 self.CreateReFuelWindow(221, 640, 220, 105)
                  self.reFuelWindow = True
             elif (not XPIsWidgetVisible(self.ReFuelWindowWidget)):
                   XPShowWidget(self.ReFuelWindowWidget)
@@ -198,7 +270,7 @@ class PythonInterface:
         self.nFuelTanks = self.acf.nFuelTanks.value
         
         x2 = x + w
-        y2 = y - h - self.nFuelTanks * 20 
+        y2 = y - h - self.nFuelTanks * 20
         Buffer = "Request Refuel"
         
         # Create the Main Widget window
@@ -208,28 +280,50 @@ class PythonInterface:
         XPSetWidgetProperty(self.ReFuelWindowWidget, xpProperty_MainWindowHasCloseBoxes, 1)
         
         self.reFuelTankInput = []
+        self.reFuelTankLabel = []
+        
+        XPCreateWidget(x+20, y-20, x+40, y-42, 1, 'Tank #', 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
+        XPCreateWidget(x+70, y-20, x+120, y-42, 1, 'Loaded', 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
+        XPCreateWidget(x+130, y-20, x+200, y-42, 1, 'Request', 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
         
         # Draw tank input 
         for i in range(self.nFuelTanks):
-            XPCreateWidget(x+20, y-46, x+40, y-54, 1, 'Tank ' + str(i+1), 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
-            tankInput = XPCreateWidget(x+60, y-40, x+190, y-62, 1, "", 0, self.ReFuelWindowWidget, xpWidgetClass_TextField)
+            XPCreateWidget(x+30, y-46, x+40, y-54, 1, '%i' % (i+1), 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
+            # tank label
+            tankLabel = XPCreateWidget(x+70, y-40, x+130, y-62, 1, 'qty ', 0, self.ReFuelWindowWidget, xpWidgetClass_TextField)
+            XPSetWidgetProperty(tankLabel, xpProperty_TextFieldType, xpTextEntryField)
+            XPSetWidgetProperty(tankLabel, xpProperty_Enabled, 0)
+            
+            tankInput = XPCreateWidget(x+140, y-40, x+200, y-62, 1, '', 0, self.ReFuelWindowWidget, xpWidgetClass_TextField)
             XPSetWidgetProperty(tankInput, xpProperty_TextFieldType, xpTextEntryField)
             XPSetWidgetProperty(tankInput, xpProperty_Enabled, 1)
             y -= 20
             self.reFuelTankInput.append(tankInput)
+            self.reFuelTankLabel.append(tankLabel)
         
         
         # Cancel button
-        self.CancelReFuelButton = XPCreateWidget(x+140, y-50, x+200, y-62, 1, "Cancel", 0, self.ReFuelWindowWidget, xpWidgetClass_Button)
+        self.CancelReFuelButton = XPCreateWidget(x+75, y-70, x+165, y-82, 1, "STOP", 0, self.ReFuelWindowWidget, xpWidgetClass_Button)
         XPSetWidgetProperty(self.CancelReFuelButton, xpProperty_ButtonType, xpPushButton)
         
         # Save button
-        self.ReFuelButton = XPCreateWidget(x+140, y-50, x+200, y-62, 1, "Request", 0, self.ReFuelWindowWidget, xpWidgetClass_Button)
+        self.ReFuelButton = XPCreateWidget(x+75, y-70, x+165, y-82, 1, "START PUMP", 0, self.ReFuelWindowWidget, xpWidgetClass_Button)
         XPSetWidgetProperty(self.ReFuelButton, xpProperty_ButtonType, xpPushButton)
         
         # Register our widget handler
         self.ReFuelWindowHandlerCB = self.ReFuelWindowHandler
         XPAddWidgetCallback(self, self.ReFuelWindowWidget, self.ReFuelWindowHandlerCB)
+        
+        self.ReFuelWindowRefresh()
+    
+    def ReFuelWindowRefresh(self):
+        '''
+        Refresh window qty Labels
+        '''
+        if XPIsWidgetVisible(self.ReFuelWindowWidget):
+            tank = self.acf.fuelTanks.value
+            for i in range(len(self.reFuelTankLabel)):
+                XPSetWidgetDescriptor(self.reFuelTankLabel[i], "%.0f" % (tank[i] * KG2LB))
         
     def ReFuelWindowHandler(self, inMessage, inWidget, inParam1, inParam2):
         if (inMessage == xpMessage_CloseButtonPushed):
@@ -258,7 +352,7 @@ class PythonInterface:
                     self.truck.show()
                 
                 XPLMSpeakString('%s Starting refuel' % self.tailnum)
-                XPLMSetFlightLoopCallbackInterval(self, self.RefuelFloopCB, CINTERVAL , 0, 0)
+                XPLMSetFlightLoopCallbackInterval(self, self.RefuelFloopCB, 3, 1, 0)
                 return 1
             if (inParam1 == self.CancelReFuelButton):
                 XPLMSpeakString('%s Refueling canceled' % self.tailnum)
@@ -271,14 +365,20 @@ class PythonInterface:
         '''
         if self.refuel and sum(self.refuel) > 0:
             #ignore first call
-            if elapsedMe > CINTERVAL * 4: return CINTERVAL
+            if elapsedMe > REFUEL_INTERVAL * 4: return REFUEL_INTERVAL
+            
+            # remove cap and wait
+            if not self.acf.fuelCap.value:
+                self.acf.fuelCap.value = 1
+                return 4 
+            
             tank = self.acf.fuelTanks.value
             
             for i in range(len(self.refuel)):
                 if self.refuel[i] > 0: 
                     break
                 
-            toFuel = RFLOW/60.0*elapsedMe
+            toFuel = self.conf.flow/60.0*elapsedMe
             if toFuel > self.refuel[i]: 
                 toFuel = self.refuel[i]
             
@@ -287,7 +387,8 @@ class PythonInterface:
             
             self.acf.fuelTanks.value = tank
             
-            return CINTERVAL
+            self.ReFuelWindowRefresh()
+            return REFUEL_INTERVAL
         else:
             XPLMSpeakString('%s Refuelling compleated' % self.tailnum)
             self.CancelRefuel()
@@ -333,6 +434,7 @@ class PythonInterface:
         if self.reFuelWindow:
             XPHideWidget(self.CancelReFuelButton)
             XPShowWidget(self.ReFuelButton)
+        self.acf.fuelCap.value = 0
             
             
     def pushBack(self):
@@ -357,7 +459,7 @@ class PythonInterface:
         Controls Fuel truck
         '''
         if not self.truck:
-            self.truck = SceneryObject(self, TRUCK_OBJ)
+            self.truck = SceneryObject(self, self.conf.obj.truck)
         
         init = self.acfP(84, 40)
         
@@ -381,7 +483,7 @@ class PythonInterface:
         '''
         
         if not self.tug:
-            self.tug = SceneryObject(self, TUG_OBJ)
+            self.tug = SceneryObject(self, self.conf.obj.tug)
                     
         y = self.acf.ly
         gear = self.acf.getGearcCoord()
@@ -415,7 +517,7 @@ class PythonInterface:
         '''
         
         if not self.stairs:
-            self.stairs = SceneryObject(self, STAIR_OBJ)
+            self.stairs = SceneryObject(self, self.conf.obj.stairs)
         
         door = self.acf.getDoorCoord(0)
         hinv =  door[4] + 90%360
@@ -448,7 +550,7 @@ class PythonInterface:
         Controls buses
         '''
         if not self.bus:
-            self.bus = SceneryObject(self, BUS_OBJ)
+            self.bus = SceneryObject(self, self.conf.obj.bus)
         
         door = self.acf.getDoorCoord(20)
         door2 = door[:]
@@ -471,7 +573,7 @@ class PythonInterface:
         Controls gpu truck
         '''
         if not self.gpu:
-            self.gpu = SceneryObject(self, GPU_OBJ)
+            self.gpu = SceneryObject(self, self.conf.obj.gpu)
         
         init = init = self.acfP(80, 40)
         pos = self.acfP(2, 19)
@@ -498,12 +600,17 @@ class Aircraft:
     Aircraft data, position and other utilities
     '''
     def __init__(self):
-        
+       
+        # Fuel
         self.payLoad    = EasyDref('sim/flightmodel/weight/m_fixed')
         self.fuelTanks  = EasyDref('sim/flightmodel/weight/m_fuel[0:9]')
         self.jettison   = EasyDref('sim/flightmodel/weight/m_jettison')
         self.jato       = EasyDref('sim/flightmodel/misc/jato_left')
         self.nFuelTanks = EasyDref('sim/aircraft/overflow/acf_num_tanks(int)')
+        
+        self.fuelCap    = EasyDref('sim/operation/failures/rel_fuelcap(int)')
+        
+        self.m_empty    = EasyDref('sim/aircraft/weight/acf_m_empty(float)') 
         
         #Tail number
         self.tailNumber = EasyDref('sim/aircraft/view/acf_tailnum[0:40]', 'bit')
@@ -559,6 +666,19 @@ class Aircraft:
         # Door position
         self.doorX = EasyDref('sim/aircraft/view/acf_door_x', 'float')
         self.doorZ = EasyDref('sim/aircraft/view/acf_door_z', 'float')
+   
+    def getClass(self):
+        '''
+        Get class by weight
+        '''
+        w = self.m_empty.value
+        
+        if   w > 255000:  self.Class = 'AB'
+        elif w >  41000:  self.Class = 'CD'
+        elif w >  12500:  self.Class = 'E'
+        else :            self.Class = 'F'
+        
+        return self.Class
         
     def get(self):
         # Return a position array suitable for Drawing
@@ -745,15 +865,15 @@ class SceneryObject:
         '''
         Cheap Animation callback
         '''
-        if elapsedMe > ANIM_RATE * 2:
+        if elapsedMe > ANIM_RATE * 4:
             return ANIM_RATE
         
         elif self.time > ANIM_RATE:
             pos = [self.x, self.y, self.z, self.theta, self.psi, self.phi]
-            pos[0] += (self.goTo[0] - pos[0]) / self.time * ANIM_RATE
+            pos[0] += (self.goTo[0] - pos[0]) / self.time * elapsedMe
             # No vertical animation
             #pos[1] += (self.goTo[1] - pos[1]) / self.time * ANIM_RATE
-            pos[2] += (self.goTo[2] - pos[2]) / self.time * ANIM_RATE
+            pos[2] += (self.goTo[2] - pos[2]) / self.time * elapsedMe
             
             # Heading
             if pos[4] != self.goTo[4]:
@@ -761,12 +881,12 @@ class SceneryObject:
                 # Get shorter heading
                 if abs(a) > 180: a = (360 - self.goTo[4] + pos[4]) * -1 %360
                 
-                tohd = a / self.time * ANIM_RATE * 4
+                tohd = a / self.time * elapsedMe * 4
                 pos[4] += tohd
                 pos[4] += 360 % 360
                             
             self.setPos(pos, True)
-            self.time -= ANIM_RATE
+            self.time -= elapsedMe
             
             return ANIM_RATE
  
