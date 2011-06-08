@@ -73,10 +73,12 @@ RFLOW=RFLOW*GAL2LIT*JETADENSITY
 
 GPM2KPM=GAL2LIT*JETADENSITY
 
+HP2W = 745.69987
 #Tug rudder offset
 TUG_OFFSET=4.2
 
-
+# In W
+TUG_POWER = 40000
 
 OBJ_PATH = 'Custom Scenery/OpenSceneryX/objects/airport/vehicles/'
 
@@ -87,6 +89,7 @@ class Empty:
 class Config:
     
     #Avaliable objects
+    # Tugs
     T_SMALL = OBJ_PATH + 'tugs/small/%i/object.obj' % randint(1,2)
     T_MEDIUM = OBJ_PATH + 'tugs/large/4/object.obj'
     T_LARGE = OBJ_PATH + 'tugs/large/%i/object.obj' % randint(1,3)
@@ -98,20 +101,24 @@ class Config:
 
     # Class defaults
     defaults = { 'AB':    { 'tug':    T_LARGE,
+                           'tpower':  280,
                            'truck':   F_LARGE,
                            'flow':   800,
                           },
                 'CD':     { 'tug':    T_MEDIUM,
                            'truck':   F_MEDIUM,
+                           'tpower':  80,
                            'flow':   600,
                           },
                  'E':     { 'tug':    T_SMALL,
+                           'tpower':  40,
                            'truck':   F_MEDIUM,
                            'flow':   400,
                           },
                  'F':     { 'tug':    T_SMALL,
+                           'tpower':  2,
                            'truck':   F_SMALL,
-                           'flow':   50,
+                           'flow':   10,
                           },
                 }
 
@@ -129,7 +136,7 @@ class Config:
         self.obj.stairs = OBJ_PATH + 'stairs/1/object.obj'
         self.obj.bus    = OBJ_PATH + 'busses_coaches/minibusses/swissport/1/object.obj'
         self.obj.gpu    = OBJ_PATH + 'gpus/1/object.obj'
-    
+        self.tpower     = self.defaults['E']['tpower'] * HP2W
     
     def getConfig(self, acfClass = False):
         '''
@@ -137,11 +144,11 @@ class Config:
         '''
         if acfClass:
             for k in self.defaults:
-                print acfClass, k
                 if k in acfClass:
                     self.obj.truck  = self.defaults[k]['truck']
                     self.obj.tug    = self.defaults[k]['tug']
                     self.flow       = self.defaults[k]['flow'] * GPM2KPM
+                    self.tpower     = self.defaults[k]['tpower'] * HP2W
                     print self.defaults[k]
                     break
         pass
@@ -408,10 +415,15 @@ class PythonInterface:
         
         self.pusbackWaitBrakes = False
         
+        gspeed = self.acf.groundspeed.value
+        
         # Accelerate aircraft
-        if (self.acf.groundspeed.value < 1.2):
+        if (gspeed < 3.3 and elapsedMe < 4):
+            power = self.conf.tpower 
+            #if gspeed < 0.5: power /= 2 
+            #power *= 1 - gspeed/5.3
             a = radians(self.acf.psi.value) + 180 % 360
-            h = 0.04
+            h = power / self.acf.m_total.value * elapsedMe
             self.acf.vx.value -= cos(a) * h
             self.acf.vz.value -= sin(a) * h
             
@@ -610,7 +622,9 @@ class Aircraft:
         
         self.fuelCap    = EasyDref('sim/operation/failures/rel_fuelcap(int)')
         
+        # Payload
         self.m_empty    = EasyDref('sim/aircraft/weight/acf_m_empty(float)') 
+        self.m_total    = EasyDref('sim/flightmodel/weight/m_total(float)')
         
         #Tail number
         self.tailNumber = EasyDref('sim/aircraft/view/acf_tailnum[0:40]', 'bit')
@@ -671,13 +685,14 @@ class Aircraft:
         '''
         Get class by weight
         '''
-        w = self.m_empty.value
+        w = self.m_total.value * KG2LB
         
         if   w > 255000:  self.Class = 'AB'
         elif w >  41000:  self.Class = 'CD'
         elif w >  12500:  self.Class = 'E'
         else :            self.Class = 'F'
         
+        print self.m_empty.value, self.Class
         return self.Class
         
     def get(self):
