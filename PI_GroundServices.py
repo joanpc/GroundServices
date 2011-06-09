@@ -101,7 +101,7 @@ class Config:
 
     # Class defaults
     defaults = { 'AB':    { 'tug':    T_LARGE,
-                           'tpower':  280,
+                           'tpower':  300,
                            'truck':   F_LARGE,
                            'flow':   800,
                           },
@@ -129,14 +129,14 @@ class Config:
         # Scenery Objects
         self.obj = Empty()
         
-        self.obj.truck  = self.defaults['E']['truck']
-        self.obj.tug    = self.defaults['E']['tug']
-        self.flow       = self.defaults['E']['flow'] * GPM2KPM
+        self.obj.truck  = self.defaults['AB']['truck']
+        self.obj.tug    = self.defaults['AB']['tug']
+        self.flow       = self.defaults['AB']['flow'] * GPM2KPM
+        self.tpower     = self.defaults['AB']['tpower'] * HP2W
 
         self.obj.stairs = OBJ_PATH + 'stairs/1/object.obj'
         self.obj.bus    = OBJ_PATH + 'busses_coaches/minibusses/swissport/1/object.obj'
         self.obj.gpu    = OBJ_PATH + 'gpus/1/object.obj'
-        self.tpower     = self.defaults['E']['tpower'] * HP2W
     
     def getConfig(self, acfClass = False):
         '''
@@ -178,6 +178,9 @@ class PythonInterface:
         self.mGpu       =  XPLMAppendMenuItem(self.mMain, 'GPU', 4, 1)
         
         self.tailnum = ''
+        
+        #erase me
+        self.count = 0
         
         # Main floop
         self.RefuelFloopCB = self.RefuelCallback
@@ -402,8 +405,12 @@ class PythonInterface:
             return 0
 
     def pushBackCallback(self, elapsedMe, elapsedSim, counter, refcon):
+        '''
+        Pushback Floop Callback
+        '''
         if (self.acf.pbrake.value):
             if (not self.pusbackWaitBrakes):
+                self.acf.brakeOverride.value = 0
                 XPLMSpeakString('%s Push back advorted' % self.tailnum)
                 if self.tug:
                     self.tug.animEndCallback = False
@@ -414,14 +421,20 @@ class PythonInterface:
                 return 1
         
         self.pusbackWaitBrakes = False
-        
-        gspeed = self.acf.groundspeed.value
+        self.acf.brakeOverride.value = 1
+        gspeed = self.acf.groundspeed.value + self.acf.gearDist * abs(self.acf.rotation.value)
         
         # Accelerate aircraft
-        if (gspeed < 3.3 and elapsedMe < 4):
+        if (elapsedMe < 4):
             power = self.conf.tpower 
-            #if gspeed < 0.5: power /= 2 
-            #power *= 1 - gspeed/5.3
+            x = (gspeed/3.3)
+            # Gas curve
+            power *= -x / 0.9*x**3+x+ 0.5
+            self.count += 1
+            # Gass debug
+            #if (self.count %25) == 0: 
+            #    print '%f, %.0f' % (x ,  power/self.conf.tpower *100)
+            ## TODO: add tug rotation
             a = radians(self.acf.psi.value) + 180 % 360
             h = power / self.acf.m_total.value * elapsedMe
             self.acf.vx.value -= cos(a) * h
@@ -653,10 +666,14 @@ class Aircraft:
         
         # brakes
         self.pbrake = EasyDref('sim/flightmodel/controls/parkbrake', 'float')
+        # override brakes
+        self.brakeOverride = EasyDref('sim/operation/override/override_gearbrake', 'int')
         
         # Ground speed
         self.groundspeed = EasyDref('sim/flightmodel/position/groundspeed', 'float')
         
+        # Rotation rate
+        self.rotation = EasyDref('sim/flightmodel/position/Rrad', 'float')
         # Rudder deflection
         self.rudder = EasyDref('sim/flightmodel/controls/ldruddef', 'float')
         
@@ -692,7 +709,7 @@ class Aircraft:
         elif w >  12500:  self.Class = 'E'
         else :            self.Class = 'F'
         
-        print self.m_empty.value, self.Class
+        print self.m_total.value * KG2LB, self.Class
         return self.Class
         
     def get(self):
@@ -703,8 +720,8 @@ class Aircraft:
     def getGearcCoord(self, dist = TUG_OFFSET):
         h = self.gear.value
         h.sort()
+        self.gearDist = abs(h[0])
         h = h[0]*-1 + dist # tug gear separation
-        
         pos = self.getPointAtHdg(h)
         
         return pos
