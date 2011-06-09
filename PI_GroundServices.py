@@ -2,6 +2,8 @@
 
 X-Plane Ground Services
 
+Under developement
+
 Copyright (C) 2011  Joan Perez i Cauhe
 ---
 This program is free software; you can redistribute it and/or
@@ -39,22 +41,11 @@ VERSION='ALPHA-1'
 PRESETS_FILE='WFprofiles.wfp'
 HELP_CAPTION='Profile name: '
 
-# Conversion rates
-LB2KG=0.45359237
-KG2LB=2.20462262
-L2GAL=0.264172052
-GAL2LIT=3.78541178
-
-# Uncomment the following line switch to the great metric system.
-#LB2KG, KG2LB = 1,1
-
 # ARBS 4600 l/min
 #RFLOW=1200
 # basket 1300k/min 2800 lb/min 1600 litres/min
 #RFLOW=420
 
-#Truck
-RFLOW=900.0
 
 #Callback interval
 REFUEL_INTERVAL=0.2
@@ -63,28 +54,38 @@ REFUEL_INTERVAL=0.2
 # 0.04 = 25FPS,  0.05 = 20FPS...
 ANIM_RATE=0.04
 
-#  kg/l
-JETADENSITY=0.8
-AVGASDENSITY=0.721
-
-
-#Flow in kg/min
-RFLOW=RFLOW*GAL2LIT*JETADENSITY
-
-GPM2KPM=GAL2LIT*JETADENSITY
-
-HP2W = 745.69987
 #Tug rudder offset
 TUG_OFFSET=4.2
-
-# In W
-TUG_POWER = 40000
 
 OBJ_PATH = 'Custom Scenery/OpenSceneryX/objects/airport/vehicles/'
 
 class Empty:
     # an empty class for assigning values
     pass
+
+class c:
+    '''
+    Conversion rates and other useful constants
+    '''
+    # weight
+    LB2KG=0.45359237
+    KG2LB=2.20462262
+    # Volume
+    #L2GAL=0.264172052
+    GAL2LIT=3.785411784
+    L2GAL=1/GAL2LIT
+    
+    # density
+    JETADENSITY=0.8
+    AVGASDENSITY=0.721
+    
+    # Flow
+    GPM2KPM=GAL2LIT*JETADENSITY
+    
+    # Force
+    #HP2W = 745.699872
+    HP2W = 745.69987158227022
+    W2HP = 1/HP2W
 
 class Config:
     
@@ -100,12 +101,12 @@ class Config:
     F_SMALL = OBJ_PATH + 'fuel/small/1/object.obj'
 
     # Class defaults
-    defaults = { 'AB':    { 'tug':    T_LARGE,
+    defaults = { 'ABC':    { 'tug':    T_LARGE,
                            'tpower':  300,
                            'truck':   F_LARGE,
                            'flow':   800,
                           },
-                'CD':     { 'tug':    T_MEDIUM,
+                'D':     { 'tug':    T_MEDIUM,
                            'truck':   F_MEDIUM,
                            'tpower':  80,
                            'flow':   600,
@@ -128,15 +129,18 @@ class Config:
         # Defaults
         # Scenery Objects
         self.obj = Empty()
+        self.tug = Empty()
         
-        self.obj.truck  = self.defaults['AB']['truck']
-        self.obj.tug    = self.defaults['AB']['tug']
-        self.flow       = self.defaults['AB']['flow'] * GPM2KPM
-        self.tpower     = self.defaults['AB']['tpower'] * HP2W
+        self.obj.truck  = self.defaults['ABC']['truck']
+        self.obj.tug    = self.defaults['ABC']['tug']
+        self.flow       = self.defaults['ABC']['flow'] * c.GPM2KPM
+        self.tpower     = self.defaults['ABC']['tpower'] * c.HP2W
 
         self.obj.stairs = OBJ_PATH + 'stairs/1/object.obj'
         self.obj.bus    = OBJ_PATH + 'busses_coaches/minibusses/swissport/1/object.obj'
         self.obj.gpu    = OBJ_PATH + 'gpus/1/object.obj'
+    
+        self.tug.autopilot = True
     
     def getConfig(self, acfClass = False):
         '''
@@ -144,11 +148,11 @@ class Config:
         '''
         if acfClass:
             for k in self.defaults:
-                if k in acfClass:
+                if acfClass in k:
                     self.obj.truck  = self.defaults[k]['truck']
                     self.obj.tug    = self.defaults[k]['tug']
-                    self.flow       = self.defaults[k]['flow'] * GPM2KPM
-                    self.tpower     = self.defaults[k]['tpower'] * HP2W
+                    self.flow       = self.defaults[k]['flow'] * c.GPM2KPM
+                    self.tpower     = self.defaults[k]['tpower'] * c.HP2W
                     print self.defaults[k]
                     break
         pass
@@ -232,13 +236,15 @@ class PythonInterface:
     
     def XPluginReceiveMessage(self, inFromWho, inMessage, inParam):
         if (inFromWho == XPLM_PLUGIN_XPLANE):
-            if (inFromWho == XPLM_PLUGIN_XPLANE and inParam == XPLM_PLUGIN_XPLANE):# On aircraft change
+            if (inParam == XPLM_PLUGIN_XPLANE and inMessage == XPLM_MSG_PLANE_LOADED):# On aircraft change
+                # On plane load
+                pass
+            elif (inParam == XPLM_PLUGIN_XPLANE and inMessage == XPLM_MSG_AIRPORT_LOADED ): # On aiport load
+                #self.reset()
+                print "airport loaded"
                 self.reset()
                 self.tailnum = self.acf.tailNumber.value[0]
                 self.conf.getConfig(self.acf.getClass())
-            # On plane load
-            if (inParam == XPLM_PLUGIN_XPLANE and inMessage == XPLM_MSG_AIRPORT_LOADED ): # On aiport load
-                self.reset()
                 plane, plane_path = XPLMGetNthAircraftModel(0)
         
     def mainMenuCB(self, menuRef, menuItem):
@@ -333,7 +339,7 @@ class PythonInterface:
         if XPIsWidgetVisible(self.ReFuelWindowWidget):
             tank = self.acf.fuelTanks.value
             for i in range(len(self.reFuelTankLabel)):
-                XPSetWidgetDescriptor(self.reFuelTankLabel[i], "%.0f" % (tank[i] * KG2LB))
+                XPSetWidgetDescriptor(self.reFuelTankLabel[i], "%.0f" % (tank[i] * c.KG2LB))
         
     def ReFuelWindowHandler(self, inMessage, inWidget, inParam1, inParam2):
         if (inMessage == xpMessage_CloseButtonPushed):
@@ -352,7 +358,7 @@ class PythonInterface:
                 for i in range(self.nFuelTanks):
                     buff = []
                     XPGetWidgetDescriptor(self.reFuelTankInput[i], buff, 256)
-                    data.append(self.float(buff[0]) * LB2KG)
+                    data.append(self.float(buff[0]) * c.LB2KG)
                 self.refuel = data
                 
                 XPHideWidget(self.ReFuelButton)
@@ -411,6 +417,7 @@ class PythonInterface:
         if (self.acf.pbrake.value):
             if (not self.pusbackWaitBrakes):
                 self.acf.brakeOverride.value = 0
+                self.acf.throttleOverride.value = 0
                 XPLMSpeakString('%s Push back advorted' % self.tailnum)
                 if self.tug:
                     self.tug.animEndCallback = False
@@ -422,18 +429,29 @@ class PythonInterface:
         
         self.pusbackWaitBrakes = False
         self.acf.brakeOverride.value = 1
+        self.acf.throttleOverride.value = 1
+        
         gspeed = self.acf.groundspeed.value + self.acf.gearDist * abs(self.acf.rotation.value)
         
         # Accelerate aircraft
         if (elapsedMe < 4):
             power = self.conf.tpower 
             x = (gspeed/3.3)
-            # Gas curve
-            power *= -x / 0.9*x**3+x+ 0.5
             self.count += 1
+            if self.conf.tug.autopilot:
+                # Gas curve
+                # smooth
+                #power *= -x / 0.9*x**3+x+ 0.5
+                #0.08x-x^4/2+0.9
+                #0.5x-1.5x^6/2+0.7
+                power *= 0.5*x-1.5*x**6/2+0.7
+            else:
+                power *=  self.acf.throttle.value[0]
+            
             # Gass debug
-            #if (self.count %25) == 0: 
-            #    print '%f, %.0f' % (x ,  power/self.conf.tpower *100)
+            if (self.count %25) == 0: 
+                print '%f, %.0f' % (x ,  power/self.conf.tpower *100)
+                print self.acf.throttle.value
             ## TODO: add tug rotation
             a = radians(self.acf.psi.value) + 180 % 360
             h = power / self.acf.m_total.value * elapsedMe
@@ -638,6 +656,7 @@ class Aircraft:
         # Payload
         self.m_empty    = EasyDref('sim/aircraft/weight/acf_m_empty(float)') 
         self.m_total    = EasyDref('sim/flightmodel/weight/m_total(float)')
+        self.m_max    = EasyDref('sim/flightmodel/weight/m_total(float)')
         
         #Tail number
         self.tailNumber = EasyDref('sim/aircraft/view/acf_tailnum[0:40]', 'bit')
@@ -666,8 +685,12 @@ class Aircraft:
         
         # brakes
         self.pbrake = EasyDref('sim/flightmodel/controls/parkbrake', 'float')
-        # override brakes
+        
+        # overrides
         self.brakeOverride = EasyDref('sim/operation/override/override_gearbrake', 'int')
+        self.throttleOverride = EasyDref('sim/operation/override/override_throttles', 'int')
+        
+        self.throttle = EasyDref('sim/flightmodel/engine/ENGN_thro[0]', 'float')
         
         # Ground speed
         self.groundspeed = EasyDref('sim/flightmodel/position/groundspeed', 'float')
@@ -686,8 +709,8 @@ class Aircraft:
         #
         
         # Gear position
-        #self.gear = EasyDref('sim/aircraft/parts/acf_gear_znodef[0:10]', 'float')
-        #self.gear = EasyDref('sim/aircraft/parts/acf_Zarm[0:10]', 'float')
+        # self.gear = EasyDref('sim/aircraft/parts/acf_gear_znodef[0:10]', 'float')
+        # self.gear = EasyDref('sim/aircraft/parts/acf_Zarm[0:10]', 'float')
         self.gear = EasyDref('sim/flightmodel/parts/tire_z_no_deflection[0:10]', 'float')
         
         # Gpu
@@ -702,14 +725,15 @@ class Aircraft:
         '''
         Get class by weight
         '''
-        w = self.m_total.value * KG2LB
+        w = self.m_max.value * c.KG2LB
         
         if   w > 255000:  self.Class = 'AB'
-        elif w >  41000:  self.Class = 'CD'
+        elif w > 180000:  self.Class = 'C'
+        elif w >  41000:  self.Class = 'D'
         elif w >  12500:  self.Class = 'E'
         else :            self.Class = 'F'
         
-        print self.m_total.value * KG2LB, self.Class
+        print "%s, empty: %i max: %i class: %s" % (self.tailNumber.value[0], self.m_empty.value * c.KG2LB , self.m_max.value * c.KG2LB, self.Class)
         return self.Class
         
     def get(self):
@@ -760,40 +784,9 @@ class Aircraft:
     def getPointAtRel(self, pos, orig = False):
         '''
         Get a point relative to the aircraft or orig
-        '''
-        #self.planeToLocal(pos, orig)
-        
+        '''        
         p1 = self.getPointAtHdg(pos[0], 90, orig)
         return self.getPointAtHdg(pos[2], 0, p1)
-
-    def planeToLocal(self, pos, orig = False):
-        '''
-        Copy paste from http://www.xsquawkbox.net/xpsdk/mediawiki/ScreenCoordinates
-        TODO: use it
-        '''
-        #INPUTS: (x_plane,y_plane,z_plane) = source location in airplane coordinates.  
-        #phi = roll, psi = heading, the = pitch.  
-        #(local_x, local_y, local_z) = plane's location in the world 
-        #OUTPUTS:(x_wrl, y_wrl, z_wrl) = transformed location in world.
-        if not orig:
-            orig = self.get()
-        
-        x_plane, y_plane, z_plane, phi, psi, the = tuple(pos)
-        local_x, local_y, local_z, lphi, lpsi, lthe = tuple(orig)
-    
-        x_phi=x_plane*cos(phi) + y_plane*sin(phi)
-        y_phi=y_plane*cos(phi) - x_plane*sin(phi)
-        z_phi=z_plane
-        
-        x_the=x_phi
-        y_the=y_phi*cos(the) - z_phi*sin(the)
-        z_the=z_phi*cos(the) + y_phi*sin(the)
-        
-        x_wrl=x_the*cos(psi) - z_the*sin(psi) + local_x
-        y_wrl=y_the                           + local_y
-        z_wrl=z_the*cos(psi) + x_the*sin(psi) + local_z
-        
-        return [x_wrl, y_wrl, z_wrl, phi, psi, the]
     
 class SceneryObject:
     '''
@@ -806,7 +799,7 @@ class SceneryObject:
     DrawCB = False
     
     def __init__(self, plugin, file, visible = False):
-        SceneryObject.plugin = plugin
+        self.__class__.plugin = plugin
         
         # position
         self.x, self.y, self.z, = 0.0, 0.0, 0.0
@@ -836,18 +829,18 @@ class SceneryObject:
            return None
         
         self.loaded = True
-        SceneryObject.objects.append(self) 
+        self.__class__.objects.append(self) 
         
         self.animEndCallback = False
         
         if not self.drawing:
-            SceneryObject.DrawCB = SceneryObject.DrawCallback
-            XPLMRegisterDrawCallback(SceneryObject.plugin, SceneryObject.DrawCB, xplm_Phase_Objects, 0, 0)
-            SceneryObject.drawing = True
+            self.__class__.DrawCB = self.__class__.DrawCallback
+            XPLMRegisterDrawCallback(self.__class__.plugin, self.__class__.DrawCB, xplm_Phase_Objects, 0, 0)
+            self.__class__.drawing = True
         
         # Main floop
         self.floop = self.floopCallback
-        XPLMRegisterFlightLoopCallback(SceneryObject.plugin, self.floop, 0, 0)
+        XPLMRegisterFlightLoopCallback(self.__class__.plugin, self.floop, 0, 0)
    
     def animate(self, queue, floor = True, loop = False):
         self._queue,  self.queue = queue[:], queue
@@ -891,7 +884,7 @@ class SceneryObject:
     def MoveTo(self, pos, time, floor = True):
         self.goTo = pos
         self.time = float(time)
-        XPLMSetFlightLoopCallbackInterval(SceneryObject.plugin, self.floop, ANIM_RATE, 0, 0)    
+        XPLMSetFlightLoopCallbackInterval(self.__class__.plugin, self.floop, ANIM_RATE, 0, 0)    
     
     def floopCallback(self, elapsedMe, elapsedSim, counter, refcon):
         '''
@@ -984,9 +977,9 @@ class SceneryObject:
         '''
         Destroy object and callbacks
         '''
-        SceneryObject.objects.remove(self)
-        XPLMSetFlightLoopCallbackInterval(SceneryObject.plugin, self.floop, ANIM_RATE, 0, 0)    
-        XPLMUnregisterFlightLoopCallback(SceneryObject.plugin, self.floop, 0)
+        self.__class__.objects.remove(self)
+        XPLMSetFlightLoopCallbackInterval(self.__class__.plugin, self.floop, ANIM_RATE, 0, 0)    
+        XPLMUnregisterFlightLoopCallback(self.__class__.plugin, self.floop, 0)
         XPLMUnloadObject(self.object)
         self = False
 
@@ -995,7 +988,7 @@ class SceneryObject:
         for obj in self.objects[:]:
             obj.destroy()
         if self.drawing:
-            XPLMUnregisterDrawCallback(SceneryObject.plugin, SceneryObject.DrawCB, xplm_Phase_Objects, 0, 0)
+            XPLMUnregisterDrawCallback(self.plugin, self.DrawCB, xplm_Phase_Objects, 0, 0)
             self.drawing = False
 
 class EasyDref:    
