@@ -86,7 +86,33 @@ class c:
     #HP2W = 745.699872
     HP2W = 745.69987158227022
     W2HP = 1/HP2W
-
+    
+    KMH2MS = 1000/3600
+    MS2KMH = 3600/1000
+    '''
+    Useful functions
+    '''
+    @classmethod
+    def circular(self, x):
+        if (x>1): x = 0
+        return (1-x**2)**0.5
+    
+    @classmethod
+    def circularRev(self, x):
+        if (abs(x)>1): x = 1
+        if (abs(x)<0): x = 0
+        return 1-(1-x**2)**0.5
+    
+    @classmethod
+    def shortHdg(self, a, b):
+        if a == 360: a = 0
+        if b == 360: b = 0
+        cw = (b - a)
+        ccw = (360 - b + a);
+        if cw < ccw:
+            return cw
+        return -ccw
+    
 class Config:
     
     #Avaliable objects
@@ -102,7 +128,7 @@ class Config:
 
     # Class defaults
     defaults = { 'ABC':    { 'tug':    T_LARGE,
-                           'tpower':  300,
+                           'tpower':  400,
                            'truck':   F_LARGE,
                            'flow':   800,
                           },
@@ -164,9 +190,12 @@ class PythonInterface:
         self.Sig = "GroundServices.joanpc.PI"
         self.Desc = "X-Plane Ground Services"
         
-        # Array of presets
+        # TODO: DELETE Array of presets
         self.presets = []
         self.presetFile = False
+        
+        # Sim pause
+        self.paused = EasyDref('sim/time/paused', 'int')
         
         self.window, self.fuelWindow, self.reFuelWindow = False, False, False
         
@@ -182,9 +211,6 @@ class PythonInterface:
         self.mGpu       =  XPLMAppendMenuItem(self.mMain, 'GPU', 4, 1)
         
         self.tailnum = ''
-        
-        #erase me
-        self.count = 0
         
         # Main floop
         self.RefuelFloopCB = self.RefuelCallback
@@ -203,7 +229,7 @@ class PythonInterface:
         
         # Init config
         self.conf = Config(self)
-
+        
         return self.Name, self.Sig, self.Desc
 
     def reset(self):
@@ -263,9 +289,9 @@ class PythonInterface:
             # Clear other actions
             objects = [self.fuelTruck, self.stairsC, self.gpuTruck]
             for obj in objects: obj('go')
-                 
-            self.tugTruck('come')
-            self.tug.animEndCallback = self.pushBack
+            self.tugTruck('none')
+            #self.tug.animEndCallback = self.pushBackReady
+            self.pushBackReady()
         elif menuItem == 3:
             if not self.stairStatus: 
                 self.stairsC('come')
@@ -386,7 +412,7 @@ class PythonInterface:
             # remove cap and wait
             if not self.acf.fuelCap.value:
                 self.acf.fuelCap.value = 1
-                return 4 
+                return 4
             
             tank = self.acf.fuelTanks.value
             
@@ -410,63 +436,158 @@ class PythonInterface:
             self.CancelRefuel()
             return 0
 
+    def pushBackStart(self):
+        # TO clean
+        self.pusbackReference = False
+        #erase me
+        self.count = 0
+        self.pusbackStatus = 'Start'
+        # gear distance init
+        self.acf.getGearcCoord(1)
+        # Overrides
+        self.pusbackWaitBrakes = False
+        self.acf.brakeOverride.value = 1
+        self.acf.throttleOverride.value = 1
+        self.acf.headingOverride.value = 1
+        self.acf.artstabOverride.value = 1
+        
+        self.pusbackDist    = 60
+        self.pusbackAngle   = 90
+        self.pushbackTime   = 0.0
+    
+    def pusBackEnd(self, user = False):
+        if user: 
+            XPLMSpeakString('%s Push back advorted' % self.tailnum)
+        else :
+            XPLMSpeakString('%s Push back finalized' % self.tailnum)
+        
+        # Unser overrides
+        self.acf.brakeOverride.value = 0
+        self.acf.throttleOverride.value = 0
+        self.acf.headingOverride.value = 0
+        self.acf.artstabOverride.value = 0
+        if self.tug:
+                self.tug.animEndCallback = False
+                self.tugTruck('go')        
+    
     def pushBackCallback(self, elapsedMe, elapsedSim, counter, refcon):
         '''
         Pushback Floop Callback
         '''
+        # do nothing if sim is paused
+        if self.paused.value: return 1
+        
+        # Wait for break release
         if (self.acf.pbrake.value):
             if (not self.pusbackWaitBrakes):
                 self.acf.brakeOverride.value = 0
                 self.acf.throttleOverride.value = 0
-                XPLMSpeakString('%s Push back advorted' % self.tailnum)
-                if self.tug:
-                    self.tug.animEndCallback = False
-                    self.tugTruck('go')
+                self.pusBackEnd(True)
                 return 0
             else:
                 # wait for release
                 return 1
         
-        self.pusbackWaitBrakes = False
-        self.acf.brakeOverride.value = 1
-        self.acf.throttleOverride.value = 1
+        # Start push back
+        if not self.pusbackStatus:
+            self.pushBackStart()
+            self.pushbackTime = elapsedSim
         
-        gspeed = self.acf.groundspeed.value + self.acf.gearDist * abs(self.acf.rotation.value)
+        maxSpeed = 3.3
+        
+        if self.pusbackStatus == 'Start':
+        
+            gspeed      = self.acf.groundspeed.value
+            dist        = self.acf.getPointDist(self.pusbackInitPos)
+            targetSpeed = sin(3*(self.pusbackDist - dist)/self.pusbackDist) * maxSpeed
+            init        = self.pusbackDist
+            #if turn?
+            dist        += self.acf.gearDist
+        ## Rotation  
+        elif self.pusbackStatus == 'Rotate':
+            # rotation speed
+            rotation    = radians(self.pusbackAngle) * 2 * self.acf.gearDist
+            gspeed      = self.acf.gearDist * abs(self.acf.rotation.value) + self.acf.groundspeed.value
+            init        = rotation
+            dist        = abs(radians(init - c.shortHdg(self.acf.get()[4], self.pusbackInitPos[4] + rotation))) * 2 * self.acf.gearDist
+            
+            x = (rotation - dist)/rotation
+            if x > 1:
+                x = 1
+            targetSpeed = x**0.4 * maxSpeed
+            
+            if not self.pusbackReference:
+                self.pusbackReference = self.acf.get()
+                print "TURN"
+            
+            turnRatio = self.acf.getPointDist(self.pusbackReference) / self.acf.gearDist
+            if 0 <= turnRatio <=1:
+                self.acf.yokeHeading.value = -(turnRatio**2)
+        
+        elif self.pusbackStatus == 'Finalize':
+            ###
+            # Todo: Return the ruder to its original position 
+            ###
+            gspeed      = self.acf.groundspeed.value
+            dist        = self.acf.getPointDist(self.pusbackInitPos)
+            targetSpeed = 2
+            init        = self.pusbackDist
+
+            turnRatio = self.acf.getPointDist(self.pusbackReference) / self.acf.gearDist
+            if 0 <= turnRatio <=1:
+                self.acf.yokeHeading.value = -(turnRatio**2)
+        
+        ## Push status change
+        if dist + 0.2 > init:
+            if  self.pusbackStatus == 'Start':
+                self.pusbackStatus = 'Rotate'
+            elif self.pusbackStatus == 'Rotate':
+                self.pusBackEnd()
+                return 0
+                #self.pusbackInitPos = self.acfP(0, self.acf.gearDist/2)
+            elif self.pusbackStatus == 'Finalize':
+                self.pusBackEnd()
+                return 0
         
         # Accelerate aircraft
         if (elapsedMe < 4):
-            power = self.conf.tpower 
-            x = (gspeed/3.3)
+            power = self.conf.tpower
             self.count += 1
-            if self.conf.tug.autopilot:
-                # Gas curve
-                # smooth
-                #power *= -x / 0.9*x**3+x+ 0.5
-                #0.08x-x^4/2+0.9
-                #0.5x-1.5x^6/2+0.7
-                power *= 0.5*x-1.5*x**6/2+0.7
-            else:
-                power *=  self.acf.throttle.value[0]
             
-            # Gass debug
-            if (self.count %25) == 0: 
-                print '%f, %.0f' % (x ,  power/self.conf.tpower *100)
-                print self.acf.throttle.value
-            ## TODO: add tug rotation
+            if self.conf.tug.autopilot:
+                x = (targetSpeed - gspeed)/maxSpeed
+                # Gas curve
+                if targetSpeed > gspeed:
+                    power *= x**0.5
+                else: 
+                    #TODO: brakes?
+                    power = 0
+            else:
+                # Let the user control the throttle
+                power *=  self.acf.throttle.value[0]
+                pass
+
+            # Debug
+            if (self.count %30) == 0: 
+                time = elapsedSim - self.pushbackTime
+                stime = '%2.0f:%2.0f:%2.0f' % (time/60, time%60, time*10%60)
+                print '%s distance: %f/%f, speed: %f, targetSpeed: %f, power: %.0f' % (stime, dist, init, gspeed*c.MS2KMH, targetSpeed*c.MS2KMH, power/self.conf.tpower *100)
+            
+            # Add power to plane
             a = radians(self.acf.psi.value) + 180 % 360
             h = power / self.acf.m_total.value * elapsedMe
             self.acf.vx.value -= cos(a) * h
             self.acf.vz.value -= sin(a) * h
             
-        # Stick tuck to aircraft
+        
         if self.tug:
+            # Stick tuck to aircraft
             gear = self.acf.getGearcCoord(0)
-            
             psi = self.acf.rudder.value*1.4
             pos = self.acf.getPointAtHdg(TUG_OFFSET, psi, gear)
-            
             self.tug.setPos(pos, True)
             self.tug.psi += psi
+        
         return -1
     
     def CancelRefuel(self):
@@ -480,13 +601,18 @@ class PythonInterface:
         self.acf.fuelCap.value = 0
             
             
-    def pushBack(self):
+    def pushBackReady(self):
         if (self.acf.pbrake.value):
             XPLMSpeakString('%s Push back ready, please release park brakes' % self.tailnum)
         else:
             XPLMSpeakString('%s Starting pushback.' % self.tailnum)
+        
+        self.pusbackStatus = False
         self.pusbackWaitBrakes = True
         XPLMSetFlightLoopCallbackInterval(self, self.PushbackCB, -1, 0, 0)
+        self.pusbackInitPos = self.acf.get()
+        self.pusbackToPos = self.acfP(0,-30)
+        self.pusbackDist = 50
         pass
 
     def float(self, string):
@@ -522,7 +648,7 @@ class PythonInterface:
         
     def tugTruck(self, op):
         '''
-        Controls Tug
+        Controls Tug object
         '''
         
         if not self.tug:
@@ -656,7 +782,7 @@ class Aircraft:
         # Payload
         self.m_empty    = EasyDref('sim/aircraft/weight/acf_m_empty(float)') 
         self.m_total    = EasyDref('sim/flightmodel/weight/m_total(float)')
-        self.m_max    = EasyDref('sim/flightmodel/weight/m_total(float)')
+        self.m_max      = EasyDref('sim/flightmodel/weight/m_total(float)')
         
         #Tail number
         self.tailNumber = EasyDref('sim/aircraft/view/acf_tailnum[0:40]', 'bit')
@@ -687,8 +813,10 @@ class Aircraft:
         self.pbrake = EasyDref('sim/flightmodel/controls/parkbrake', 'float')
         
         # overrides
-        self.brakeOverride = EasyDref('sim/operation/override/override_gearbrake', 'int')
-        self.throttleOverride = EasyDref('sim/operation/override/override_throttles', 'int')
+        self.brakeOverride      = EasyDref('sim/operation/override/override_gearbrake', 'int')
+        self.throttleOverride   = EasyDref('sim/operation/override/override_throttles', 'int')
+        self.headingOverride    = EasyDref('sim/operation/override/override_joystick_heading', 'int')
+        self.artstabOverride    = EasyDref('sim/operation/override/override_artstab', 'int')
         
         self.throttle = EasyDref('sim/flightmodel/engine/ENGN_thro[0]', 'float')
         
@@ -701,8 +829,8 @@ class Aircraft:
         self.rudder = EasyDref('sim/flightmodel/controls/ldruddef', 'float')
         
         # Gear deflection
-        self.gearHeading = EasyDref('sim/flightmodel2/gear/gear_heading_deg[0:3]', 'float')
-        
+        self.yokeHeading = EasyDref('sim/joystick/yolk_heading_ratio', 'float')
+
         #
         # yoke
         # sim/joystick/yolk_heading_ratio
@@ -787,6 +915,12 @@ class Aircraft:
         '''        
         p1 = self.getPointAtHdg(pos[0], 90, orig)
         return self.getPointAtHdg(pos[2], 0, p1)
+    
+    def getPointDist(self, pos, orig = False):
+        if not orig:
+            orig = self.get()
+        x, y = pos[0] - orig[0], pos[2] - orig[2]
+        return (x**2 + y**2)**0.5
     
 class SceneryObject:
     '''
@@ -902,9 +1036,7 @@ class SceneryObject:
             
             # Heading
             if pos[4] != self.goTo[4]:
-                a = self.goTo[4] - pos[4]
-                # Get shorter heading
-                if abs(a) > 180: a = (360 - self.goTo[4] + pos[4]) * -1 %360
+                a = c.shortHdg(self.goTo[4], pos[4])
                 
                 tohd = a / self.time * elapsedMe * 4
                 pos[4] += tohd
