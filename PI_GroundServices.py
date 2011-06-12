@@ -112,6 +112,14 @@ class c:
         if cw < ccw:
             return cw
         return -ccw
+    @classmethod
+    def fullHdg(self, a, b):
+        if a == 360: a = 0
+        if b == 360: b = 0
+        if b > a:
+            return (b - a)
+        else:
+            return (360 - a + b)
     
 class Config:
     
@@ -138,7 +146,7 @@ class Config:
                            'flow':   600,
                           },
                  'E':     { 'tug':    T_SMALL,
-                           'tpower':  40,
+                           'tpower':  70,
                            'truck':   F_MEDIUM,
                            'flow':   400,
                           },
@@ -289,9 +297,9 @@ class PythonInterface:
             # Clear other actions
             objects = [self.fuelTruck, self.stairsC, self.gpuTruck]
             for obj in objects: obj('go')
-            self.tugTruck('none')
-            #self.tug.animEndCallback = self.pushBackReady
-            self.pushBackReady()
+            self.tugTruck('come')
+            self.tug.animEndCallback = self.pushBackReady
+            #self.pushBackReady()
         elif menuItem == 3:
             if not self.stairStatus: 
                 self.stairsC('come')
@@ -307,6 +315,9 @@ class PythonInterface:
                 self.gpuTruck('go')
                 self.gpuStatus = False
 
+    def CreatePushBackWindow(self, x, y, w, h):
+        pass
+        
     def CreateReFuelWindow(self, x, y, w, h):
         # Get number of fuel tanks
         self.nFuelTanks = self.acf.nFuelTanks.value
@@ -451,8 +462,13 @@ class PythonInterface:
         self.acf.headingOverride.value = 1
         self.acf.artstabOverride.value = 1
         
-        self.pusbackDist    = 60
-        self.pusbackAngle   = 90
+        # Center yoke
+        self.acf.yokeHeading.value = 0
+        
+        self.pusbackDist    = 50
+        self.pusbackAngle   = 70
+        # right -1 , left 1
+        self.pusbackDir     = -1
         self.pushbackTime   = 0.0
     
     def pusBackEnd(self, user = False):
@@ -467,8 +483,8 @@ class PythonInterface:
         self.acf.headingOverride.value = 0
         self.acf.artstabOverride.value = 0
         if self.tug:
-                self.tug.animEndCallback = False
-                self.tugTruck('go')        
+            self.tug.animEndCallback = False
+            self.tugTruck('go')        
     
     def pushBackCallback(self, elapsedMe, elapsedSim, counter, refcon):
         '''
@@ -501,44 +517,50 @@ class PythonInterface:
             dist        = self.acf.getPointDist(self.pusbackInitPos)
             targetSpeed = sin(3*(self.pusbackDist - dist)/self.pusbackDist) * maxSpeed
             init        = self.pusbackDist
-            #if turn?
-            dist        += self.acf.gearDist
+            
+            #if rotation 1-0.8x^4
+            x = (self.pusbackDist - dist)/self.pusbackDist
+            # Start
+            if x > 0.5:
+                targetSpeed = (1-0.9*x**4) * maxSpeed
+            else:
+                targetSpeed  =  (1-(1-x)**8) * maxSpeed
+            
+            dist        += self.acf.gearDist 
+            
+            
         ## Rotation  
         elif self.pusbackStatus == 'Rotate':
             # rotation speed
-            rotation    = radians(self.pusbackAngle) * 2 * self.acf.gearDist
-            gspeed      = self.acf.gearDist * abs(self.acf.rotation.value) + self.acf.groundspeed.value
+            rotation    = self.pusbackAngle
+            gspeed      = abs(self.acf.gearDist * abs(self.acf.rotation.value)) + self.acf.groundspeed.value
+            # togo
             init        = rotation
-            dist        = abs(radians(init - c.shortHdg(self.acf.get()[4], self.pusbackInitPos[4] + rotation))) * 2 * self.acf.gearDist
+            # distance
+            dist        = abs(init - c.fullHdg(self.acf.get()[4], (self.pusbackInitPos[4] + rotation) %360))
             
             x = (rotation - dist)/rotation
             if x > 1:
                 x = 1
-            targetSpeed = x**0.4 * maxSpeed
-            
+            targetSpeed = (x**0.3-0.3*x) * maxSpeed
             if not self.pusbackReference:
                 self.pusbackReference = self.acf.get()
                 print "TURN"
+        
+            turnRatio = self.acf.getPointDist(self.pusbackReference) / self.acf.gearDist
+            if 0 <= turnRatio <=1:
+                self.acf.yokeHeading.value = (turnRatio**2) * self.pusbackDir
             
-            turnRatio = self.acf.getPointDist(self.pusbackReference) / self.acf.gearDist
-            if 0 <= turnRatio <=1:
-                self.acf.yokeHeading.value = -(turnRatio**2)
-        
-        elif self.pusbackStatus == 'Finalize':
-            ###
-            # Todo: Return the ruder to its original position 
-            ###
-            gspeed      = self.acf.groundspeed.value
-            dist        = self.acf.getPointDist(self.pusbackInitPos)
-            targetSpeed = 2
-            init        = self.pusbackDist
-
-            turnRatio = self.acf.getPointDist(self.pusbackReference) / self.acf.gearDist
-            if 0 <= turnRatio <=1:
-                self.acf.yokeHeading.value = -(turnRatio**2)
-        
+            # Finalize rotation
+            if (rotation - dist) < 15:
+                self.acf.yokeHeading.value = ((rotation - dist)/15)**0.8 * self.pusbackDir
+                
+            #time = elapsedSim - self.pushbackTime
+            #stime = '%2.0f:%2.0f:%2.0f' % (time/60, time%60, time*10%60)
+            #print '%s distance: %f/%f, speed: %f, targetSpeed: %f, power: %.0f' % (stime, dist, init, gspeed*c.MS2KMH, targetSpeed*c.MS2KMH, 0)
+            
         ## Push status change
-        if dist + 0.2 > init:
+        if dist + 0.1 > init:
             if  self.pusbackStatus == 'Start':
                 self.pusbackStatus = 'Rotate'
             elif self.pusbackStatus == 'Rotate':
@@ -556,12 +578,13 @@ class PythonInterface:
             
             if self.conf.tug.autopilot:
                 x = (targetSpeed - gspeed)/maxSpeed
-                # Gas curve
+               
                 if targetSpeed > gspeed:
+                    # Gas curve
                     power *= x**0.5
                 else: 
-                    #TODO: brakes?
-                    power = 0
+                    # Brakes (maxPower/4)
+                    power *= 0.25*x**3
             else:
                 # Let the user control the throttle
                 power *=  self.acf.throttle.value[0]
@@ -571,7 +594,7 @@ class PythonInterface:
             if (self.count %30) == 0: 
                 time = elapsedSim - self.pushbackTime
                 stime = '%2.0f:%2.0f:%2.0f' % (time/60, time%60, time*10%60)
-                print '%s distance: %f/%f, speed: %f, targetSpeed: %f, power: %.0f' % (stime, dist, init, gspeed*c.MS2KMH, targetSpeed*c.MS2KMH, power/self.conf.tpower *100)
+                print '%s distance: %f/%f, speed: %f, targetSpeed: %f, power: %.0f' % (stime, dist, init, gspeed, targetSpeed, power/self.conf.tpower *100)
             
             # Add power to plane
             a = radians(self.acf.psi.value) + 180 % 360
@@ -1034,14 +1057,14 @@ class SceneryObject:
             #pos[1] += (self.goTo[1] - pos[1]) / self.time * ANIM_RATE
             pos[2] += (self.goTo[2] - pos[2]) / self.time * elapsedMe
             
-            # Heading
             if pos[4] != self.goTo[4]:
-                a = c.shortHdg(self.goTo[4], pos[4])
+                a = c.shortHdg(pos[4], self.goTo[4])
                 
-                tohd = a / self.time * elapsedMe * 4
+                tohd = a/self.time * elapsedMe * 4
                 pos[4] += tohd
                 pos[4] += 360 % 360
                             
+            
             self.setPos(pos, True)
             self.time -= elapsedMe
             
@@ -1058,6 +1081,7 @@ class SceneryObject:
                 self.goTo[4] = self.getHeading(self.getPos(), self.goTo)
 
             return ANIM_RATE
+        
         # end callback
         elif self.animEndCallback: 
             self.animEndCallback()
