@@ -36,7 +36,7 @@ from random import randint
 from math import *
 import cPickle
 
-DEBUG=True
+DEBUG=False
 
 # False constants
 VERSION='ALPHA-2'
@@ -553,12 +553,19 @@ class PythonInterface:
         self.pusbackStatus = 'Start'
         # gear distance init
         self.acf.getGearcCoord(1)
-        # Overrides
+    
         self.pusbackWaitBrakes = False
-        self.acf.brakeOverride.value = 1
-        self.acf.throttleOverride.value = 1
-        self.acf.headingOverride.value = 1
-        self.acf.artstabOverride.value = 1
+        
+        # Overrides
+        if self.conf.tug.autopilot:
+            self.acf.brakeOverride.value = 1
+            self.acf.throttleOverride.value = 1
+            self.acf.headingOverride.value = 1
+            self.acf.artstabOverride.value = 1
+            self.acf.headingOverride.value = 1
+        else:
+            self.acf.throttleOverride.value = 1
+            self.pusbackStatus = 'Autopilot'
         
         # Center yoke
         self.acf.yokeHeading.value = 0
@@ -581,7 +588,7 @@ class PythonInterface:
         self.acf.artstabOverride.value = 0
         if self.tug:
             self.tug.animEndCallback = False
-            self.tugTruck('go')        
+            self.tugTruck('go')
     
     def pushBackCallback(self, elapsedMe, elapsedSim, counter, refcon):
         '''
@@ -658,7 +665,9 @@ class PythonInterface:
             
         ## Push status change
         if dist + 0.1 > init:
-            if  self.pusbackStatus == 'Start':
+            if  not self.conf.tug.autopilot:
+                pass
+            elif  self.pusbackStatus == 'Start':
                 self.pusbackStatus = 'Rotate'
             elif self.pusbackStatus == 'Rotate':
                 self.pusBackEnd()
@@ -697,7 +706,7 @@ class PythonInterface:
             a = radians(self.acf.psi.value) + 180 % 360
             h = power / self.acf.m_total.value * elapsedMe
             # angular vel
-            av = sin(radians(self.acf.yokeHeading.value * self.acf.gearMaxSteer.value)) * h
+            av = sin(radians(self.acf.yokeHeading.value * self.acf.gearMaxSteer.value)) /self.acf.gearDist * h
             yv = cos(radians(self.acf.yokeHeading.value * self.acf.gearMaxSteer.value)) * h
             
             self.acf.rotation.value -= av
@@ -705,6 +714,7 @@ class PythonInterface:
             self.acf.vz.value -= sin(a) * yv
             
             if DEBUG and (self.count %30) == 0: 
+                print "av: %f, xv: %f, yv: %f" % (self.acf.rotation.value, self.acf.vx.value,  self.acf.vz.value)
                 print "power: %f av: %f, yv: %f" % (h, av, yv) 
         
         if self.tug:
