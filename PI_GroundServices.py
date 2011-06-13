@@ -36,6 +36,8 @@ from random import randint
 from math import *
 import cPickle
 
+DEBUG=False
+
 # False constants
 VERSION='ALPHA-1'
 PRESETS_FILE='WFprofiles.wfp'
@@ -187,7 +189,9 @@ class Config:
                     self.obj.tug    = self.defaults[k]['tug']
                     self.flow       = self.defaults[k]['flow'] * c.GPM2KPM
                     self.tpower     = self.defaults[k]['tpower'] * c.HP2W
-                    print self.defaults[k]
+                    
+                    if DEBUG:
+                        print self.defaults[k]
                     break
         pass
         
@@ -205,7 +209,7 @@ class PythonInterface:
         # Sim pause
         self.paused = EasyDref('sim/time/paused', 'int')
         
-        self.window, self.fuelWindow, self.reFuelWindow = False, False, False
+        self.window, self.fuelWindow, self.reFuelWindow, self.pushbackWindow = False, False, False, False
         
         self.Mmenu = self.mainMenuCB
         
@@ -274,8 +278,6 @@ class PythonInterface:
                 # On plane load
                 pass
             elif (inParam == XPLM_PLUGIN_XPLANE and inMessage == XPLM_MSG_AIRPORT_LOADED ): # On aiport load
-                #self.reset()
-                print "airport loaded"
                 self.reset()
                 self.tailnum = self.acf.tailNumber.value[0]
                 self.conf.getConfig(self.acf.getClass())
@@ -288,18 +290,18 @@ class PythonInterface:
         if menuItem == 1:
             self.fuelTruck('come')
             if (not self.reFuelWindow):
-                 self.CreateReFuelWindow(221, 640, 220, 105)
+                 self.CreateReFuelWindow(221, 640, 290, 105)
                  self.reFuelWindow = True
             elif (not XPIsWidgetVisible(self.ReFuelWindowWidget)):
                   XPShowWidget(self.ReFuelWindowWidget)
         elif menuItem == 2:
             ## Pushback
-            # Clear other actions
-            objects = [self.fuelTruck, self.stairsC, self.gpuTruck]
-            for obj in objects: obj('go')
-            self.tugTruck('come')
-            self.tug.animEndCallback = self.pushBackReady
-            #self.pushBackReady()
+            if (not self.pushbackWindow):
+                 self.CreatePushBackWindow(221, 640, 200, 165)
+                 self.pushbackWindow = True
+            elif (not XPIsWidgetVisible(self.PusbackWindowWidget)):
+                  XPShowWidget(self.PusbackWindowWidget)
+            
         elif menuItem == 3:
             if not self.stairStatus: 
                 self.stairsC('come')
@@ -316,8 +318,85 @@ class PythonInterface:
                 self.gpuStatus = False
 
     def CreatePushBackWindow(self, x, y, w, h):
-        pass
+        x2 = x + w
+        y2 = y - h
+        Buffer = "Request PushBack"
         
+        # Create the Main Widget window
+        self.PusbackWindowWidget = XPCreateWidget(x, y, x2, y2, 1, Buffer, 1,0 , xpWidgetClass_MainWindow)
+        window = self.PusbackWindowWidget
+        
+        # Add Close Box decorations to the Main Widget
+        XPSetWidgetProperty(window, xpProperty_MainWindowHasCloseBoxes, 1)
+        
+        x += 20
+        # rotation
+        XPCreateWidget(x+20, y-40, x+40, y-60, 1, 'Rotation', 0, window, xpWidgetClass_Caption)
+        self.pusbackRotInput = XPCreateWidget(x+70, y-40, x+130, y-62, 1, '80', 0, window, xpWidgetClass_TextField)
+        XPSetWidgetProperty(self.pusbackRotInput, xpProperty_TextFieldType, xpTextEntryField)
+        XPSetWidgetProperty(self.pusbackRotInput, xpProperty_Enabled, 1)
+        
+        y -= 30
+        # distance
+        XPCreateWidget(x+20, y-40, x+40, y-60, 1, 'Distance', 0, window, xpWidgetClass_Caption)
+        self.pusbackDistInput = XPCreateWidget(x+70, y-40, x+130, y-62, 1, '90', 0, window, xpWidgetClass_TextField)
+        XPSetWidgetProperty(self.pusbackDistInput, xpProperty_TextFieldType, xpTextEntryField)
+        XPSetWidgetProperty(self.pusbackDistInput, xpProperty_Enabled, 1)
+        
+        y-= 25
+        
+        # Default checkbox
+        XPCreateWidget(x+40, y-40, x+70, y-60, 1, 'Right', 0, window, xpWidgetClass_Caption)
+        self.pusbackRightCheck = XPCreateWidget(x+75, y-40, x+85, y-60, 1, "", 0, window, xpWidgetClass_Button)
+        XPSetWidgetProperty(self.pusbackRightCheck, xpProperty_ButtonType, xpRadioButton)
+        XPSetWidgetProperty(self.pusbackRightCheck, xpProperty_ButtonBehavior, xpButtonBehaviorCheckBox)
+        
+        y-= 20
+        
+        # Request Button 
+        self.pushbackButton = XPCreateWidget(x+40, y-50, x+140, y-70, 1, "REQUEST", 0, window, xpWidgetClass_Button)
+        XPSetWidgetProperty(self.pushbackButton, xpProperty_ButtonType, xpPushButton)
+        
+        # Register our widget handler
+        self.PusbackWindowHandlerCB = self.PushbackWindowHandler
+        XPAddWidgetCallback(self, window, self.PusbackWindowHandlerCB)
+        
+        pass
+    
+    def PushbackWindowHandler(self, inMessage, inWidget, inParam1, inParam2):
+        if (inMessage == xpMessage_CloseButtonPushed):
+            if (self.pushbackWindow):
+                XPHideWidget(self.PusbackWindowWidget)
+            return 1
+
+        # Handle any button pushes
+        if (inMessage == xpMsg_PushButtonPressed):
+
+            if (inParam1 == self.pushbackButton):
+
+                # Set pushback options                
+                buff = []
+                XPGetWidgetDescriptor(self.pusbackDistInput, buff, 256)
+                self.pusbackDist    = self.float(buff[0])
+                buff = []
+                XPGetWidgetDescriptor(self.pusbackRotInput, buff, 256)
+                a = float(buff[0])
+                self.pusbackAngle   = abs(a)
+                
+                right = XPGetWidgetProperty(self.pusbackRightCheck, xpProperty_ButtonState, None)
+                if right:
+                    self.pusbackDir =-1
+                else:
+                    self.pusbackDir = 1
+                # Clear other actions
+                objects = [self.fuelTruck, self.stairsC, self.gpuTruck]
+                for obj in objects: obj('go')
+                self.tugTruck('come')
+                self.tug.animEndCallback = self.pushBackReady
+                #self.pushBackReady()
+                return 1
+        return 0
+    
     def CreateReFuelWindow(self, x, y, w, h):
         # Get number of fuel tanks
         self.nFuelTanks = self.acf.nFuelTanks.value
@@ -329,15 +408,19 @@ class PythonInterface:
         # Create the Main Widget window
         self.ReFuelWindowWidget = XPCreateWidget(x, y, x2, y2, 1, Buffer, 1,0 , xpWidgetClass_MainWindow)
         
+        y-= 10
+        
         # Add Close Box decorations to the Main Widget
         XPSetWidgetProperty(self.ReFuelWindowWidget, xpProperty_MainWindowHasCloseBoxes, 1)
         
         self.reFuelTankInput = []
         self.reFuelTankLabel = []
+        total = self.acf.fuelTotal.value
+        ratio = self.acf.tankRatio.value
         
         XPCreateWidget(x+20, y-20, x+40, y-42, 1, 'Tank #', 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
         XPCreateWidget(x+70, y-20, x+120, y-42, 1, 'Loaded', 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
-        XPCreateWidget(x+130, y-20, x+200, y-42, 1, 'Request', 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
+        XPCreateWidget(x+195, y-20, x+250, y-42, 1, 'Request', 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
         
         # Draw tank input 
         for i in range(self.nFuelTanks):
@@ -347,13 +430,18 @@ class PythonInterface:
             XPSetWidgetProperty(tankLabel, xpProperty_TextFieldType, xpTextEntryField)
             XPSetWidgetProperty(tankLabel, xpProperty_Enabled, 0)
             
-            tankInput = XPCreateWidget(x+140, y-40, x+200, y-62, 1, '', 0, self.ReFuelWindowWidget, xpWidgetClass_TextField)
+            # tank  total label
+            max = total * ratio[i] * c.KG2LB
+            XPCreateWidget(x+130, y-40, x+180, y-62, 1, '/ %.0f ' % max, 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
+            
+            tankInput = XPCreateWidget(x+190, y-40, x+250, y-62, 1, '', 0, self.ReFuelWindowWidget, xpWidgetClass_TextField)
             XPSetWidgetProperty(tankInput, xpProperty_TextFieldType, xpTextEntryField)
             XPSetWidgetProperty(tankInput, xpProperty_Enabled, 1)
             y -= 20
             self.reFuelTankInput.append(tankInput)
             self.reFuelTankLabel.append(tankLabel)
         
+        # totals
         
         # Cancel button
         self.CancelReFuelButton = XPCreateWidget(x+75, y-70, x+165, y-82, 1, "STOP", 0, self.ReFuelWindowWidget, xpWidgetClass_Button)
@@ -465,10 +553,6 @@ class PythonInterface:
         # Center yoke
         self.acf.yokeHeading.value = 0
         
-        self.pusbackDist    = 50
-        self.pusbackAngle   = 70
-        # right -1 , left 1
-        self.pusbackDir     = -1
         self.pushbackTime   = 0.0
     
     def pusBackEnd(self, user = False):
@@ -545,16 +629,16 @@ class PythonInterface:
             targetSpeed = (x**0.3-0.3*x) * maxSpeed
             if not self.pusbackReference:
                 self.pusbackReference = self.acf.get()
-                print "TURN"
+                
+                if DEBUG:
+                    print "TURN"
         
             turnRatio = self.acf.getPointDist(self.pusbackReference) / self.acf.gearDist
             if 0 <= turnRatio <=1:
                 self.acf.yokeHeading.value = (turnRatio**2) * self.pusbackDir
-            
             # Finalize rotation
             if (rotation - dist) < 15:
                 self.acf.yokeHeading.value = ((rotation - dist)/15)**0.8 * self.pusbackDir
-                
             #time = elapsedSim - self.pushbackTime
             #stime = '%2.0f:%2.0f:%2.0f' % (time/60, time%60, time*10%60)
             #print '%s distance: %f/%f, speed: %f, targetSpeed: %f, power: %.0f' % (stime, dist, init, gspeed*c.MS2KMH, targetSpeed*c.MS2KMH, 0)
@@ -566,7 +650,6 @@ class PythonInterface:
             elif self.pusbackStatus == 'Rotate':
                 self.pusBackEnd()
                 return 0
-                #self.pusbackInitPos = self.acfP(0, self.acf.gearDist/2)
             elif self.pusbackStatus == 'Finalize':
                 self.pusBackEnd()
                 return 0
@@ -591,7 +674,7 @@ class PythonInterface:
                 pass
 
             # Debug
-            if (self.count %30) == 0: 
+            if DEBUG and (self.count %30) == 0: 
                 time = elapsedSim - self.pushbackTime
                 stime = '%2.0f:%2.0f:%2.0f' % (time/60, time%60, time*10%60)
                 print '%s distance: %f/%f, speed: %f, targetSpeed: %f, power: %.0f' % (stime, dist, init, gspeed, targetSpeed, power/self.conf.tpower *100)
@@ -606,7 +689,7 @@ class PythonInterface:
         if self.tug:
             # Stick tuck to aircraft
             gear = self.acf.getGearcCoord(0)
-            psi = self.acf.rudder.value*1.4
+            psi = self.acf.tire_steer_act.value[0]
             pos = self.acf.getPointAtHdg(TUG_OFFSET, psi, gear)
             self.tug.setPos(pos, True)
             self.tug.psi += psi
@@ -635,7 +718,6 @@ class PythonInterface:
         XPLMSetFlightLoopCallbackInterval(self, self.PushbackCB, -1, 0, 0)
         self.pusbackInitPos = self.acf.get()
         self.pusbackToPos = self.acfP(0,-30)
-        self.pusbackDist = 50
         pass
 
     def float(self, string):
@@ -673,7 +755,6 @@ class PythonInterface:
         '''
         Controls Tug object
         '''
-        
         if not self.tug:
             self.tug = SceneryObject(self, self.conf.obj.tug)
                     
@@ -796,9 +877,11 @@ class Aircraft:
         # Fuel
         self.payLoad    = EasyDref('sim/flightmodel/weight/m_fixed')
         self.fuelTanks  = EasyDref('sim/flightmodel/weight/m_fuel[0:9]')
+        self.fuelTotal  = EasyDref('sim/aircraft/weight/acf_m_fuel_tot', 'float')
         self.jettison   = EasyDref('sim/flightmodel/weight/m_jettison')
         self.jato       = EasyDref('sim/flightmodel/misc/jato_left')
         self.nFuelTanks = EasyDref('sim/aircraft/overflow/acf_num_tanks(int)')
+        self.tankRatio  = EasyDref('sim/aircraft/overflow/acf_tank_rat[0:9]', 'float')
         
         self.fuelCap    = EasyDref('sim/operation/failures/rel_fuelcap(int)')
         
@@ -853,6 +936,12 @@ class Aircraft:
         
         # Gear deflection
         self.yokeHeading = EasyDref('sim/joystick/yolk_heading_ratio', 'float')
+        #self.tire_steer = EasyDref('sim/flightmodel2/gear/tire_steer_actual_deg[0:1]', 'float')
+        self.tire_steer_act = EasyDref('sim/flightmodel/parts/tire_steer_act[0:1]', 'float')
+        
+        
+        self.gearMaxSteer = EasyDref('sim/aircraft/gear/acf_nw_steerdeg1', 'float')
+        self.gearMaxSteer2 = EasyDref('sim/aircraft/gear/acf_nw_steerdeg1', 'float')
 
         #
         # yoke
@@ -862,6 +951,7 @@ class Aircraft:
         # Gear position
         # self.gear = EasyDref('sim/aircraft/parts/acf_gear_znodef[0:10]', 'float')
         # self.gear = EasyDref('sim/aircraft/parts/acf_Zarm[0:10]', 'float')
+        #self.gear = EasyDref('sim/flightmodel/parts/tire_z_no_deflection[0:10]', 'float')
         self.gear = EasyDref('sim/flightmodel/parts/tire_z_no_deflection[0:10]', 'float')
         
         # Gpu
@@ -871,6 +961,10 @@ class Aircraft:
         # Door position
         self.doorX = EasyDref('sim/aircraft/view/acf_door_x', 'float')
         self.doorZ = EasyDref('sim/aircraft/view/acf_door_z', 'float')
+   
+    def refresh(self):
+        # refresh values on acf change
+        pass
    
     def getClass(self):
         '''
@@ -884,7 +978,8 @@ class Aircraft:
         elif w >  12500:  self.Class = 'E'
         else :            self.Class = 'F'
         
-        print "%s, empty: %i max: %i class: %s" % (self.tailNumber.value[0], self.m_empty.value * c.KG2LB , self.m_max.value * c.KG2LB, self.Class)
+        if DEBUG:
+            print "%s, empty: %i max: %i class: %s" % (self.tailNumber.value[0], self.m_empty.value * c.KG2LB , self.m_max.value * c.KG2LB, self.Class)
         return self.Class
         
     def get(self):
