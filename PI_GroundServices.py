@@ -36,7 +36,7 @@ from random import randint
 from math import *
 import cPickle
 
-DEBUG=False
+DEBUG=True
 
 # False constants
 VERSION='ALPHA-2'
@@ -697,8 +697,8 @@ class PythonInterface:
             a = radians(self.acf.psi.value) + 180 % 360
             h = power / self.acf.m_total.value * elapsedMe
             # angular vel
-            av = sin(self.acf.yokeHeading.value) * h
-            yv = cos(self.acf.yokeHeading.value) * h
+            av = sin(radians(self.acf.yokeHeading.value * self.acf.gearMaxSteer.value)) * h
+            yv = cos(radians(self.acf.yokeHeading.value * self.acf.gearMaxSteer.value)) * h
             
             self.acf.rotation.value -= av
             self.acf.vx.value -= cos(a) * yv
