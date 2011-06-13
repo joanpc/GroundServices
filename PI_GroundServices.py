@@ -39,7 +39,7 @@ import cPickle
 DEBUG=False
 
 # False constants
-VERSION='ALPHA-1'
+VERSION='ALPHA-2'
 PRESETS_FILE='WFprofiles.wfp'
 HELP_CAPTION='Profile name: '
 
@@ -357,6 +357,11 @@ class PythonInterface:
         self.pushbackButton = XPCreateWidget(x+40, y-50, x+140, y-70, 1, "REQUEST", 0, window, xpWidgetClass_Button)
         XPSetWidgetProperty(self.pushbackButton, xpProperty_ButtonType, xpPushButton)
         
+        # Cancel Button 
+        self.pushbackCancelButton = XPCreateWidget(x+40, y-50, x+140, y-70, 1, "CANCEL", 0, window, xpWidgetClass_Button)
+        XPSetWidgetProperty(self.pushbackButton, xpProperty_ButtonType, xpPushButton)
+        XPHideWidget(self.pushbackCancelButton)
+        
         # Register our widget handler
         self.PusbackWindowHandlerCB = self.PushbackWindowHandler
         XPAddWidgetCallback(self, window, self.PusbackWindowHandlerCB)
@@ -373,6 +378,8 @@ class PythonInterface:
         if (inMessage == xpMsg_PushButtonPressed):
 
             if (inParam1 == self.pushbackButton):
+                XPHideWidget(self.pushbackButton)
+                XPShowWidget(self.pushbackCancelButton)
 
                 # Set pushback options                
                 buff = []
@@ -395,6 +402,9 @@ class PythonInterface:
                 self.tug.animEndCallback = self.pushBackReady
                 #self.pushBackReady()
                 return 1
+            elif (inParam1 == self.pushbackCancelButton ):
+                self.pusBackEnd(True)
+                pass
         return 0
     
     def CreateReFuelWindow(self, x, y, w, h):
@@ -556,6 +566,9 @@ class PythonInterface:
         self.pushbackTime   = 0.0
     
     def pusBackEnd(self, user = False):
+        if self.pushbackWindow:
+            XPHideWidget(self.pushbackCancelButton)
+            XPShowWidget(self.pushbackButton)
         if user: 
             XPLMSpeakString('%s Push back advorted' % self.tailnum)
         else :
@@ -680,11 +693,19 @@ class PythonInterface:
                 print '%s distance: %f/%f, speed: %f, targetSpeed: %f, power: %.0f' % (stime, dist, init, gspeed, targetSpeed, power/self.conf.tpower *100)
             
             # Add power to plane
+            
             a = radians(self.acf.psi.value) + 180 % 360
             h = power / self.acf.m_total.value * elapsedMe
-            self.acf.vx.value -= cos(a) * h
-            self.acf.vz.value -= sin(a) * h
+            # angular vel
+            av = sin(self.acf.yokeHeading.value) * h
+            yv = cos(self.acf.yokeHeading.value) * h
             
+            self.acf.rotation.value -= av
+            self.acf.vx.value -= cos(a) * yv
+            self.acf.vz.value -= sin(a) * yv
+            
+            if DEBUG and (self.count %30) == 0: 
+                print "power: %f av: %f, yv: %f" % (h, av, yv) 
         
         if self.tug:
             # Stick tuck to aircraft
