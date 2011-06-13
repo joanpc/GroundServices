@@ -251,6 +251,11 @@ class PythonInterface:
         if (self.reFuelWindow):
             XPDestroyWidget(self, self.ReFuelWindowWidget, 1)
             self.reFuelWindow = False
+        
+        if self.pushbackWindow:
+            XPHideWidget(self.pushbackCancelButton)
+            XPShowWidget(self.pushbackButton)
+        
         # Stop pushback
         XPLMSetFlightLoopCallbackInterval(self, self.PushbackCB, 0, 0, 0)
         # Stop Refuel
@@ -412,7 +417,7 @@ class PythonInterface:
         self.nFuelTanks = self.acf.nFuelTanks.value
         
         x2 = x + w
-        y2 = y - h - self.nFuelTanks * 20
+        y2 = y - h - self.nFuelTanks * 20 - 20
         Buffer = "Request Refuel"
         
         # Create the Main Widget window
@@ -451,14 +456,28 @@ class PythonInterface:
             self.reFuelTankInput.append(tankInput)
             self.reFuelTankLabel.append(tankLabel)
         
-        # totals
+        # TOTALS
+        y -= 10
+        XPCreateWidget(x+20, y-46, x+40, y-54, 1, 'TOTAL: ', 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
+        # tank label
+        self.reFuelTankTotal = XPCreateWidget(x+70, y-40, x+130, y-62, 1, 'qty ', 0, self.ReFuelWindowWidget, xpWidgetClass_TextField)
+        XPSetWidgetProperty(self.reFuelTankTotal, xpProperty_TextFieldType, xpTextEntryField)
+        XPSetWidgetProperty(self.reFuelTankTotal, xpProperty_Enabled, 0)
+            
+        # tank  total label
+        XPCreateWidget(x+130, y-40, x+190, y-62, 1, '/ %.0f ' % total, 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
+        
+        # TODO: request total    
+        #XPCreateWidget(x+190, y-40, x+250, y-62, 1, '', 0, self.ReFuelWindowWidget, xpWidgetClass_TextField)
+        #XPSetWidgetProperty(tankInput, xpProperty_TextFieldType, xpTextEntryField)
+        #XPSetWidgetProperty(tankInput, xpProperty_Enabled, 0)
         
         # Cancel button
-        self.CancelReFuelButton = XPCreateWidget(x+75, y-70, x+165, y-82, 1, "STOP", 0, self.ReFuelWindowWidget, xpWidgetClass_Button)
+        self.CancelReFuelButton = XPCreateWidget(x+100, y-80, x+200, y-92, 1, "STOP", 0, self.ReFuelWindowWidget, xpWidgetClass_Button)
         XPSetWidgetProperty(self.CancelReFuelButton, xpProperty_ButtonType, xpPushButton)
         
         # Save button
-        self.ReFuelButton = XPCreateWidget(x+75, y-70, x+165, y-82, 1, "START PUMP", 0, self.ReFuelWindowWidget, xpWidgetClass_Button)
+        self.ReFuelButton = XPCreateWidget(x+100, y-80, x+200, y-92, 1, "START PUMP", 0, self.ReFuelWindowWidget, xpWidgetClass_Button)
         XPSetWidgetProperty(self.ReFuelButton, xpProperty_ButtonType, xpPushButton)
         
         # Register our widget handler
@@ -473,8 +492,11 @@ class PythonInterface:
         '''
         if XPIsWidgetVisible(self.ReFuelWindowWidget):
             tank = self.acf.fuelTanks.value
+            total = 0
             for i in range(len(self.reFuelTankLabel)):
                 XPSetWidgetDescriptor(self.reFuelTankLabel[i], "%.0f" % (tank[i] * c.KG2LB))
+                total += tank[i]
+            XPSetWidgetDescriptor(self.reFuelTankTotal, "%.0f" % (total * c.KG2LB))
         
     def ReFuelWindowHandler(self, inMessage, inWidget, inParam1, inParam2):
         if (inMessage == xpMessage_CloseButtonPushed):
@@ -521,7 +543,7 @@ class PythonInterface:
             # remove cap and wait
             if not self.acf.fuelCap.value:
                 self.acf.fuelCap.value = 1
-                return 4
+                return 1
             
             tank = self.acf.fuelTanks.value
             
