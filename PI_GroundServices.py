@@ -86,8 +86,9 @@ class c:
     
     # Force
     #HP2W = 745.699872
-    HP2W = 745.69987158227022
-    W2HP = 1/HP2W
+    HP2W    = 745.69987158227022
+    W2HP    = 1/HP2W
+    BHP2W   = 9810.657  
     
     KMH2MS = 1000/3600
     MS2KMH = 3600/1000
@@ -242,6 +243,13 @@ class PythonInterface:
         # Init config
         self.conf = Config(self)
         
+        # Register commands
+        self.cmd = []
+        self.cmd.append(EasyCommand(self, 'pusback_request', self.PushBack, ('Request', False), 'Request Push Back, toggle window'))
+        self.cmd.append(EasyCommand(self, 'pusback_cancel', self.PushBack, ('Stop', True), 'Cancel Push Back')) 
+        self.cmd.append(EasyCommand(self, 'refuel_request', self.ReFuel, ('Request', False), 'Request Refuel, toggle window')) 
+        self.cmd.append(EasyCommand(self, 'refuel_cancel', self.ReFuel, ('Stop', True), 'Cancel Refuel'))
+        
         return self.Name, self.Sig, self.Desc
 
     def reset(self):
@@ -266,6 +274,9 @@ class PythonInterface:
 
     def XPluginStop(self):
         self.reset()
+        # Unregister commands
+        for c in self.cmd:
+            c.destroy()
         XPLMUnregisterFlightLoopCallback(self, self.RefuelFloopCB, 0)
         XPLMUnregisterFlightLoopCallback(self, self.PushbackCB, 0)
         XPLMDestroyMenu(self, self.mMain)
@@ -293,19 +304,9 @@ class PythonInterface:
         Main menu Callback
         '''
         if menuItem == 1:
-            self.fuelTruck('come')
-            if (not self.reFuelWindow):
-                 self.CreateReFuelWindow(221, 640, 290, 105)
-                 self.reFuelWindow = True
-            elif (not XPIsWidgetVisible(self.ReFuelWindowWidget)):
-                  XPShowWidget(self.ReFuelWindowWidget)
+            self.Refuel("Request")
         elif menuItem == 2:
-            ## Pushback
-            if (not self.pushbackWindow):
-                 self.CreatePushBackWindow(221, 640, 200, 165)
-                 self.pushbackWindow = True
-            elif (not XPIsWidgetVisible(self.PusbackWindowWidget)):
-                  XPShowWidget(self.PusbackWindowWidget)
+            self.PushBack("Request")
             
         elif menuItem == 3:
             if not self.stairStatus: 
@@ -383,33 +384,11 @@ class PythonInterface:
         if (inMessage == xpMsg_PushButtonPressed):
 
             if (inParam1 == self.pushbackButton):
-                XPHideWidget(self.pushbackButton)
-                XPShowWidget(self.pushbackCancelButton)
-
-                # Set pushback options                
-                buff = []
-                XPGetWidgetDescriptor(self.pusbackDistInput, buff, 256)
-                self.pusbackDist    = self.float(buff[0])
-                buff = []
-                XPGetWidgetDescriptor(self.pusbackRotInput, buff, 256)
-                a = float(buff[0])
-                self.pusbackAngle   = abs(a)
-                
-                right = XPGetWidgetProperty(self.pusbackRightCheck, xpProperty_ButtonState, None)
-                if right:
-                    self.pusbackDir =-1
-                else:
-                    self.pusbackDir = 1
-                # Clear other actions
-                objects = [self.fuelTruck, self.stairsC, self.gpuTruck]
-                for obj in objects: obj('go')
-                self.tugTruck('come')
-                self.tug.animEndCallback = self.pushBackReady
-                #self.pushBackReady()
+                self.PushBack('Requested')
                 return 1
             elif (inParam1 == self.pushbackCancelButton ):
-                self.pusBackEnd(True)
-                pass
+                self.PushBack('Stop', True)
+                return 1
         return 0
     
     def CreateReFuelWindow(self, x, y, w, h):
@@ -508,28 +487,11 @@ class PythonInterface:
 
         # Handle any button pushes
         if (inMessage == xpMsg_PushButtonPressed):
-
             if (inParam1 == self.ReFuelButton):
-                
-                data = []
-                for i in range(self.nFuelTanks):
-                    buff = []
-                    XPGetWidgetDescriptor(self.reFuelTankInput[i], buff, 256)
-                    data.append(self.float(buff[0]) * c.LB2KG)
-                self.refuel = data
-                
-                XPHideWidget(self.ReFuelButton)
-                XPShowWidget(self.CancelReFuelButton)
-                
-                if self.truck and not self.truck.visible:
-                    self.truck.show()
-                
-                XPLMSpeakString('%s Starting refuel' % self.tailnum)
-                XPLMSetFlightLoopCallbackInterval(self, self.RefuelFloopCB, 3, 1, 0)
+                self.Refuel('Start')
                 return 1
             if (inParam1 == self.CancelReFuelButton):
-                XPLMSpeakString('%s Refueling canceled' % self.tailnum)
-                self.CancelRefuel()
+                self.Refuel('Stop', True)
         return 0
     
     def RefuelCallback(self, elapsedMe, elapsedSim, counter, refcon):
@@ -563,55 +525,102 @@ class PythonInterface:
             self.ReFuelWindowRefresh()
             return REFUEL_INTERVAL
         else:
-            XPLMSpeakString('%s Refuelling compleated' % self.tailnum)
-            self.CancelRefuel()
+            self.Refuel("Stop")
             return 0
 
-    def pushBackStart(self):
-        # TO clean
-        self.pusbackReference = False
-        #erase me
-        self.count = 0
-        self.pusbackStatus = 'Start'
-        # gear distance init
-        self.acf.getGearcCoord(1)
-    
-        self.pusbackWaitBrakes = False
+    def PushBack(self, op = "Request", user = False):
+        if op == 'Request':
+            ## Pushback
+            if (not self.pushbackWindow):
+                 self.CreatePushBackWindow(221, 640, 200, 165)
+                 self.pushbackWindow = True
+            elif (not XPIsWidgetVisible(self.PusbackWindowWidget)):
+                  XPShowWidget(self.PusbackWindowWidget)
+            else:
+                XPHideWidget(self.PusbackWindowWidget)
+            pass
+        elif op == 'Requested':
+            XPHideWidget(self.pushbackButton)
+            XPShowWidget(self.pushbackCancelButton)
+
+            # Set pushback options                
+            buff = []
+            XPGetWidgetDescriptor(self.pusbackDistInput, buff, 256)
+            self.pusbackDist    = self.float(buff[0])
+            buff = []
+            XPGetWidgetDescriptor(self.pusbackRotInput, buff, 256)
+            a = float(buff[0])
+            self.pusbackAngle   = abs(a)
+            
+            right = XPGetWidgetProperty(self.pusbackRightCheck, xpProperty_ButtonState, None)
+            if right:
+                self.pusbackDir =-1
+            else:
+                self.pusbackDir = 1
+            # Clear other actions
+            objects = [self.fuelTruck, self.stairsC, self.gpuTruck]
+            for obj in objects: obj('go')
+            self.tugTruck('come')
+            self.tug.animEndCallback = self.pushBackReady
+            #self.pushBackReady()
         
-        # Overrides
-        if self.conf.tug.autopilot:
-            self.acf.brakeOverride.value = 1
-            self.acf.throttleOverride.value = 1
-            self.acf.headingOverride.value = 1
-            self.acf.artstabOverride.value = 1
-            self.acf.headingOverride.value = 1
-        else:
-            self.acf.throttleOverride.value = 1
-            self.pusbackStatus = 'Autopilot'
+        elif op == 'Ready':
+            if (self.acf.pbrake.value):
+                XPLMSpeakString('%s Push back ready, please release park brakes' % self.tailnum)
+            else:
+                XPLMSpeakString('%s Starting pushback.' % self.tailnum)
+            
+            self.pusbackStatus = False
+            self.pusbackWaitBrakes = True
+            XPLMSetFlightLoopCallbackInterval(self, self.PushbackCB, -1, 0, 0)
+            self.pusbackInitPos = self.acf.get()
+            self.pusbackToPos = self.acfP(0,-30)
+            pass
+
+        elif op == 'Start':
+            # TO clean
+            self.pusbackReference = False
+            #erase me
+            self.count = 0
+            self.pusbackStatus = 'Start'
+            # gear distance init
+            self.acf.getGearcCoord(1)
         
-        # Center yoke
-        self.acf.yokeHeading.value = 0
+            self.pusbackWaitBrakes = False
+            
+            # Overrides
+            if self.conf.tug.autopilot:
+                self.acf.headingOverride.value = 1
+                self.acf.artstabOverride.value = 1
+            else:
+                self.acf.brakeOverride.value = 1
+                self.acf.throttleOverride.value = 1
+                self.pusbackStatus = 'Autopilot'
+            
+            # Center yoke
+            self.acf.yokeHeading.value = 0
+            
+            self.pushbackTime   = 0.0
+            
+            pass
+        if op == 'Stop':
+            if self.pushbackWindow:
+                XPHideWidget(self.pushbackCancelButton)
+                XPShowWidget(self.pushbackButton)
+            if user: 
+                XPLMSpeakString('%s Push back advorted' % self.tailnum)
+            else :
+                XPLMSpeakString('%s Push back finalized' % self.tailnum)
+            
+            # Unser overrides
+            self.acf.brakeOverride.value = 0
+            self.acf.throttleOverride.value = 0
+            self.acf.headingOverride.value = 0
+            self.acf.artstabOverride.value = 0
+            if self.tug:
+                self.tug.animEndCallback = False
+                self.tugTruck('go')
         
-        self.pushbackTime   = 0.0
-    
-    def pusBackEnd(self, user = False):
-        if self.pushbackWindow:
-            XPHideWidget(self.pushbackCancelButton)
-            XPShowWidget(self.pushbackButton)
-        if user: 
-            XPLMSpeakString('%s Push back advorted' % self.tailnum)
-        else :
-            XPLMSpeakString('%s Push back finalized' % self.tailnum)
-        
-        # Unser overrides
-        self.acf.brakeOverride.value = 0
-        self.acf.throttleOverride.value = 0
-        self.acf.headingOverride.value = 0
-        self.acf.artstabOverride.value = 0
-        if self.tug:
-            self.tug.animEndCallback = False
-            self.tugTruck('go')
-    
     def pushBackCallback(self, elapsedMe, elapsedSim, counter, refcon):
         '''
         Pushback Floop Callback
@@ -623,8 +632,8 @@ class PythonInterface:
         if (self.acf.pbrake.value):
             if (not self.pusbackWaitBrakes):
                 self.acf.brakeOverride.value = 0
-                self.acf.throttleOverride.value = 0
-                self.pusBackEnd(True)
+                #self.acf.throttleOverride.value = 0
+                self.PushBack('Stop', True)
                 return 0
             else:
                 # wait for release
@@ -632,10 +641,12 @@ class PythonInterface:
         
         # Start push back
         if not self.pusbackStatus:
-            self.pushBackStart()
+            self.PushBack('Start')
             self.pushbackTime = elapsedSim
         
         maxSpeed = 3.3
+        dist = 100
+        init = 0
         
         if self.pusbackStatus == 'Start':
         
@@ -692,12 +703,9 @@ class PythonInterface:
             elif  self.pusbackStatus == 'Start':
                 self.pusbackStatus = 'Rotate'
             elif self.pusbackStatus == 'Rotate':
-                self.pusBackEnd()
+                self.PushBack('Stop')
                 return 0
-            elif self.pusbackStatus == 'Finalize':
-                self.pusBackEnd()
-                return 0
-        
+            
         # Accelerate aircraft
         if (elapsedMe < 4):
             power = self.conf.tpower
@@ -749,28 +757,52 @@ class PythonInterface:
         
         return -1
     
-    def CancelRefuel(self):
-        self.refuel = False;
-        if self.truck:
-            self.fuelTruck('go')
-        XPLMSetFlightLoopCallbackInterval(self, self.RefuelFloopCB, 0, 0, 0)
-        if self.reFuelWindow:
-            XPHideWidget(self.CancelReFuelButton)
-            XPShowWidget(self.ReFuelButton)
-        self.acf.fuelCap.value = 0
+    def Refuel(self, op = 'Start', user = False):
+        """
+        Manages refueling actions
+        """
+        if op == 'Request':
+            self.fuelTruck('come')
+            if (not self.reFuelWindow):
+                self.CreateReFuelWindow(221, 640, 290, 105)
+                self.reFuelWindow = True
+            elif (not XPIsWidgetVisible(self.ReFuelWindowWidget)):
+                XPShowWidget(self.ReFuelWindowWidget)
+            else:
+                XPHideWidget(self.ReFuelWindowWidget)
+        elif op == 'Stop':
+            if user:
+                XPLMSpeakString('%s Refuelling canceled' % self.tailnum)
+            else:
+                XPLMSpeakString('%s Refuelling compleated' % self.tailnum)
+            self.refuel = False;
+            if self.truck:
+                self.fuelTruck('go')
+            XPLMSetFlightLoopCallbackInterval(self, self.RefuelFloopCB, 0, 0, 0)
+            if self.reFuelWindow:
+                XPHideWidget(self.CancelReFuelButton)
+                XPShowWidget(self.ReFuelButton)
+            self.acf.fuelCap.value = 0
+        elif op == 'Start':
+            data = []
+            for i in range(self.nFuelTanks):
+                buff = []
+                XPGetWidgetDescriptor(self.reFuelTankInput[i], buff, 256)
+                data.append(self.float(buff[0]) * c.LB2KG)
+            self.refuel = data
             
+            XPHideWidget(self.ReFuelButton)
+            XPShowWidget(self.CancelReFuelButton)
             
+            if self.truck and not self.truck.visible:
+                self.truck.show()
+            
+            XPLMSpeakString('%s Starting refuel' % self.tailnum)
+            XPLMSetFlightLoopCallbackInterval(self, self.RefuelFloopCB, 3, 1, 0)
+            pass
+
     def pushBackReady(self):
-        if (self.acf.pbrake.value):
-            XPLMSpeakString('%s Push back ready, please release park brakes' % self.tailnum)
-        else:
-            XPLMSpeakString('%s Starting pushback.' % self.tailnum)
-        
-        self.pusbackStatus = False
-        self.pusbackWaitBrakes = True
-        XPLMSetFlightLoopCallbackInterval(self, self.PushbackCB, -1, 0, 0)
-        self.pusbackInitPos = self.acf.get()
-        self.pusbackToPos = self.acfP(0,-30)
+        self.PushBack('Ready')
         pass
 
     def float(self, string):
@@ -780,6 +812,10 @@ class PythonInterface:
         except ValueError:
             val = 0.0
         return val
+    
+    '''
+        Object animations
+    '''
     
     def fuelTruck(self, op):
         '''
@@ -1189,6 +1225,8 @@ class SceneryObject:
     def MoveTo(self, pos, time, floor = True):
         self.goTo = pos
         self.time = float(time)
+        
+        self.totHeading =  c.shortHdg(self.getPos()[4], self.goTo[4])
         XPLMSetFlightLoopCallbackInterval(self.__class__.plugin, self.floop, ANIM_RATE, 0, 0)    
     
     def floopCallback(self, elapsedMe, elapsedSim, counter, refcon):
@@ -1205,10 +1243,10 @@ class SceneryObject:
             #pos[1] += (self.goTo[1] - pos[1]) / self.time * ANIM_RATE
             pos[2] += (self.goTo[2] - pos[2]) / self.time * elapsedMe
             
-            if pos[4] != self.goTo[4]:
+            if self.totHeading != 0 and pos[4] != self.goTo[4]:
                 a = c.shortHdg(pos[4], self.goTo[4])
                 
-                tohd = a/self.time * elapsedMe * 4
+                tohd = a/self.time * elapsedMe
                 pos[4] += tohd
                 pos[4] += 360 % 360
                             
@@ -1294,6 +1332,27 @@ class SceneryObject:
         if self.drawing:
             XPLMUnregisterDrawCallback(self.plugin, self.DrawCB, xplm_Phase_Objects, 0, 0)
             self.drawing = False
+
+class EasyCommand:
+    '''
+    Creates a command with an assigned callback with arguments
+    '''
+    def __init__(self, plugin, command, function, arg = (), description =''):
+        command = 'xjpc/ground_services/' + command
+        self.command = XPLMCreateCommand(command, description)
+        self.commandCH = self.commandCHandler
+        XPLMRegisterCommandHandler(plugin, self.command, self.commandCH, 1, 0)
+
+        self.function = function
+        self.arg = arg        
+        self.plugin = plugin
+        # Command handlers
+    def commandCHandler(self, inCommand, inPhase, inRefcon):
+        if inPhase == 0:
+            self.function(*self.arg)
+        return 0
+    def destroy(self):
+        XPLMUnregisterCommandHandler(plugin, self.command, self.commandCH, 1, 0)
 
 class EasyDref:    
     '''
