@@ -154,7 +154,12 @@ class Config:
                            'flow':   400,
                           },
                  'F':     { 'tug':    T_SMALL,
-                           'tpower':  2,
+                           'tpower':  4,
+                           'truck':   F_SMALL,
+                           'flow':   10,
+                          },
+                 'GA':     { 'tug':    T_SMALL,
+                           'tpower':  4,
                            'truck':   F_SMALL,
                            'flow':   10,
                           },
@@ -245,10 +250,10 @@ class PythonInterface:
         
         # Register commands
         self.cmd = []
-        self.cmd.append(EasyCommand(self, 'pusback_request', self.PushBack, ('Request', False), 'Request Push Back, toggle window'))
+        self.cmd.append(EasyCommand(self, 'pusback_request', self.PushBack, 'Request', 'Request Push Back, toggle window'))
         self.cmd.append(EasyCommand(self, 'pusback_cancel', self.PushBack, ('Stop', True), 'Cancel Push Back')) 
-        self.cmd.append(EasyCommand(self, 'refuel_request', self.ReFuel, ('Request', False), 'Request Refuel, toggle window')) 
-        self.cmd.append(EasyCommand(self, 'refuel_cancel', self.ReFuel, ('Stop', True), 'Cancel Refuel'))
+        self.cmd.append(EasyCommand(self, 'refuel_request', self.Refuel, 'Request', 'Request Refuel, toggle window')) 
+        self.cmd.append(EasyCommand(self, 'refuel_cancel', self.Refuel, ('Stop', True), 'Cancel Refuel'))
         
         return self.Name, self.Sig, self.Desc
 
@@ -256,7 +261,7 @@ class PythonInterface:
         '''
         Resets all animations, actions and windows
         '''
-        if (self.reFuelWindow):
+        if self.reFuelWindow:
             XPDestroyWidget(self, self.ReFuelWindowWidget, 1)
             self.reFuelWindow = False
         
@@ -273,13 +278,18 @@ class PythonInterface:
         self.pos , self.truck, self.tug, self.stairs, self.bus, self.gpu = tuple([False]) * 6
 
     def XPluginStop(self):
-        self.reset()
+        XPLMDestroyMenu(self, self.mMain)
         # Unregister commands
         for c in self.cmd:
             c.destroy()
+        self.reset()
+        
+        # Reset windows
+        if self.pushbackWindow:
+            XPDestroyWidget(self, self.PusbackWindowWidget, 1)
+            
         XPLMUnregisterFlightLoopCallback(self, self.RefuelFloopCB, 0)
         XPLMUnregisterFlightLoopCallback(self, self.PushbackCB, 0)
-        XPLMDestroyMenu(self, self.mMain)
         pass
         
     def XPluginEnable(self):
@@ -332,39 +342,45 @@ class PythonInterface:
         self.PusbackWindowWidget = XPCreateWidget(x, y, x2, y2, 1, Buffer, 1,0 , xpWidgetClass_MainWindow)
         window = self.PusbackWindowWidget
         
+        # Create the Sub window
+        subw = XPCreateWidget(x+10, y-30, x2-20 + 10, y2+40, 1, "" ,  0,window, xpWidgetClass_SubWindow)
+        # Set the style to sub window
+        XPSetWidgetProperty(subw, xpProperty_SubWindowType, xpSubWindowStyle_SubWindow)
+        
         # Add Close Box decorations to the Main Widget
         XPSetWidgetProperty(window, xpProperty_MainWindowHasCloseBoxes, 1)
         
         x += 20
-        # rotation
-        XPCreateWidget(x+20, y-40, x+40, y-60, 1, 'Rotation', 0, window, xpWidgetClass_Caption)
-        self.pusbackRotInput = XPCreateWidget(x+70, y-40, x+130, y-62, 1, '80', 0, window, xpWidgetClass_TextField)
-        XPSetWidgetProperty(self.pusbackRotInput, xpProperty_TextFieldType, xpTextEntryField)
-        XPSetWidgetProperty(self.pusbackRotInput, xpProperty_Enabled, 1)
-        
-        y -= 30
         # distance
         XPCreateWidget(x+20, y-40, x+40, y-60, 1, 'Distance', 0, window, xpWidgetClass_Caption)
         self.pusbackDistInput = XPCreateWidget(x+70, y-40, x+130, y-62, 1, '90', 0, window, xpWidgetClass_TextField)
         XPSetWidgetProperty(self.pusbackDistInput, xpProperty_TextFieldType, xpTextEntryField)
         XPSetWidgetProperty(self.pusbackDistInput, xpProperty_Enabled, 1)
         
+        y -= 30
+        
+        # rotation
+        XPCreateWidget(x+20, y-40, x+40, y-60, 1, 'Rotation', 0, window, xpWidgetClass_Caption)
+        self.pusbackRotInput = XPCreateWidget(x+70, y-40, x+130, y-62, 1, '80', 0, window, xpWidgetClass_TextField)
+        XPSetWidgetProperty(self.pusbackRotInput, xpProperty_TextFieldType, xpTextEntryField)
+        XPSetWidgetProperty(self.pusbackRotInput, xpProperty_Enabled, 1)
+        
         y-= 25
         
         # Default checkbox
-        XPCreateWidget(x+40, y-40, x+70, y-60, 1, 'Right', 0, window, xpWidgetClass_Caption)
-        self.pusbackRightCheck = XPCreateWidget(x+75, y-40, x+85, y-60, 1, "", 0, window, xpWidgetClass_Button)
+        XPCreateWidget(x+20, y-40, x+40, y-60, 1, 'Nose Right', 0, window, xpWidgetClass_Caption)
+        self.pusbackRightCheck = XPCreateWidget(x+90, y-40, x+100, y-60, 1, "", 0, window, xpWidgetClass_Button)
         XPSetWidgetProperty(self.pusbackRightCheck, xpProperty_ButtonType, xpRadioButton)
         XPSetWidgetProperty(self.pusbackRightCheck, xpProperty_ButtonBehavior, xpButtonBehaviorCheckBox)
         
         y-= 20
         
         # Request Button 
-        self.pushbackButton = XPCreateWidget(x+40, y-50, x+140, y-70, 1, "REQUEST", 0, window, xpWidgetClass_Button)
+        self.pushbackButton = XPCreateWidget(x+20, y-60, x+140, y-80, 1, "REQUEST", 0, window, xpWidgetClass_Button)
         XPSetWidgetProperty(self.pushbackButton, xpProperty_ButtonType, xpPushButton)
         
         # Cancel Button 
-        self.pushbackCancelButton = XPCreateWidget(x+40, y-50, x+140, y-70, 1, "CANCEL", 0, window, xpWidgetClass_Button)
+        self.pushbackCancelButton = XPCreateWidget(x+20, y-60, x+140, y-80, 1, "CANCEL", 0, window, xpWidgetClass_Button)
         XPSetWidgetProperty(self.pushbackButton, xpProperty_ButtonType, xpPushButton)
         XPHideWidget(self.pushbackCancelButton)
         
@@ -401,6 +417,11 @@ class PythonInterface:
         
         # Create the Main Widget window
         self.ReFuelWindowWidget = XPCreateWidget(x, y, x2, y2, 1, Buffer, 1,0 , xpWidgetClass_MainWindow)
+        
+        # Create the Sub window
+        subw = XPCreateWidget(x+10, y-30, x2-20 + 10, y2+40, 1, "" ,  0, self.ReFuelWindowWidget , xpWidgetClass_SubWindow)
+        # Set the style to sub window
+        XPSetWidgetProperty(subw, xpProperty_SubWindowType, xpSubWindowStyle_SubWindow)
         
         y-= 10
         
@@ -444,7 +465,7 @@ class PythonInterface:
         XPSetWidgetProperty(self.reFuelTankTotal, xpProperty_Enabled, 0)
             
         # tank  total label
-        XPCreateWidget(x+130, y-40, x+190, y-62, 1, '/ %.0f ' % total, 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
+        XPCreateWidget(x+130, y-40, x+280, y-62, 1, '/ %.0f ' % (total *c.KG2LB), 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
         
         # TODO: request total    
         #XPCreateWidget(x+190, y-40, x+250, y-62, 1, '', 0, self.ReFuelWindowWidget, xpWidgetClass_TextField)
@@ -572,9 +593,9 @@ class PythonInterface:
             
             self.pusbackStatus = False
             self.pusbackWaitBrakes = True
-            XPLMSetFlightLoopCallbackInterval(self, self.PushbackCB, -1, 0, 0)
             self.pusbackInitPos = self.acf.get()
             self.pusbackToPos = self.acfP(0,-30)
+            XPLMSetFlightLoopCallbackInterval(self, self.PushbackCB, -1, 0, 0)
             pass
 
         elif op == 'Start':
@@ -585,6 +606,12 @@ class PythonInterface:
             self.pusbackStatus = 'Start'
             # gear distance init
             self.acf.getGearcCoord(1)
+            
+            if self.acf.gearDist > 3:
+                self.pushbackMaxSpeed = 4
+            else:
+                # walking speed
+                self.pushbackMaxSpeed = 1.39
         
             self.pusbackWaitBrakes = False
             
@@ -601,9 +628,9 @@ class PythonInterface:
             self.acf.yokeHeading.value = 0
             
             self.pushbackTime   = 0.0
-            
             pass
-        if op == 'Stop':
+        elif op == 'Stop':
+            XPLMSetFlightLoopCallbackInterval(self, self.PushbackCB, 0, 0, 0)
             if self.pushbackWindow:
                 XPHideWidget(self.pushbackCancelButton)
                 XPShowWidget(self.pushbackButton)
@@ -612,7 +639,7 @@ class PythonInterface:
             else :
                 XPLMSpeakString('%s Push back finalized' % self.tailnum)
             
-            # Unser overrides
+            # Unset overrides
             self.acf.brakeOverride.value = 0
             self.acf.throttleOverride.value = 0
             self.acf.headingOverride.value = 0
@@ -644,7 +671,7 @@ class PythonInterface:
             self.PushBack('Start')
             self.pushbackTime = elapsedSim
         
-        maxSpeed = 3.3
+        maxSpeed = self.pushbackMaxSpeed
         dist = 100
         init = 0
         
@@ -679,10 +706,12 @@ class PythonInterface:
             x = (rotation - dist)/rotation
             if x > 1:
                 x = 1
+            if x < 0:
+                x = 0
             targetSpeed = (x**0.3-0.3*x) * maxSpeed
+            
             if not self.pusbackReference:
                 self.pusbackReference = self.acf.get()
-                
                 if DEBUG:
                     print "TURN"
         
@@ -723,6 +752,13 @@ class PythonInterface:
             else:
                 # Let the user control the throttle
                 power *=  self.acf.throttle.value[0]
+                # drag
+                gspeed = abs(self.acf.gearDist * abs(self.acf.rotation.value)) + self.acf.groundspeed.value
+                #1-0.5x^2
+                power *= 1-0.5*(gspeed/maxSpeed)**2 
+                #power = 0
+                #self.acf.throttleOverride.value = 1
+                #self.acf.throttleUse.value = [0.0]*8
                 pass
 
             # Debug
@@ -1014,6 +1050,7 @@ class Aircraft:
         self.artstabOverride    = EasyDref('sim/operation/override/override_artstab', 'int')
         
         self.throttle = EasyDref('sim/flightmodel/engine/ENGN_thro[0]', 'float')
+        self.throttleUse = EasyDref('sim/flightmodel/engine/ENGN_thro_use[0:8]', 'float')
         
         # Ground speed
         self.groundspeed = EasyDref('sim/flightmodel/position/groundspeed', 'float')
@@ -1065,7 +1102,8 @@ class Aircraft:
         elif w > 180000:  self.Class = 'C'
         elif w >  41000:  self.Class = 'D'
         elif w >  12500:  self.Class = 'E'
-        else :            self.Class = 'F'
+        elif w >   4500:  self.Class = 'F'
+        else: self.Class = 'GA' 
         
         if DEBUG:
             print "%s, empty: %i max: %i class: %s" % (self.tailNumber.value[0], self.m_empty.value * c.KG2LB , self.m_max.value * c.KG2LB, self.Class)
@@ -1298,7 +1336,7 @@ class SceneryObject:
             info = []
             XPLMProbeTerrainXYZ(self.ProbeRef, pos[0], pos[1], pos[2], info)
             self.x, self.y, self.z = info[1], info[2] ,info[3]
-            self.theta, self.psi, self.phi = pos[3], pos[4], pos[5]
+            self.theta, self.psi, self.phi = info[4], pos[4], info[5]
         else:
              self.x, self.y, self.z, self.theta, self.psi, self.phi = tuple(pos)
     def getPos(self):
@@ -1337,22 +1375,28 @@ class EasyCommand:
     '''
     Creates a command with an assigned callback with arguments
     '''
-    def __init__(self, plugin, command, function, arg = (), description =''):
+    def __init__(self, plugin, command, function, args = False, description =''):
         command = 'xjpc/ground_services/' + command
         self.command = XPLMCreateCommand(command, description)
         self.commandCH = self.commandCHandler
         XPLMRegisterCommandHandler(plugin, self.command, self.commandCH, 1, 0)
 
         self.function = function
-        self.arg = arg        
+        self.args = args        
         self.plugin = plugin
         # Command handlers
     def commandCHandler(self, inCommand, inPhase, inRefcon):
         if inPhase == 0:
-            self.function(*self.arg)
+            if self.args:
+                if type(self.args).__name__ == 'tuple':
+                    self.function(*self.args)
+                else:
+                    self.function(self.args)
+            else:
+                self.function()
         return 0
     def destroy(self):
-        XPLMUnregisterCommandHandler(plugin, self.command, self.commandCH, 1, 0)
+        XPLMUnregisterCommandHandler(self.plugin, self.command, self.commandCH, 1, 0)
 
 class EasyDref:    
     '''
