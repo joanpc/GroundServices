@@ -123,6 +123,11 @@ class c:
             return (b - a)
         else:
             return (360 - a + b)
+    @classmethod
+    def limit(self, x, lim = 1):
+        if      x > lim: return lim
+        elif    x < -lim: return -lim
+        else:   return x
     
 class Config:
     
@@ -130,6 +135,8 @@ class Config:
     # Tugs
     T_SMALL = OBJ_PATH + 'tugs/small/%i/object.obj' % randint(1,2)
     T_MEDIUM = OBJ_PATH + 'tugs/large/4/object.obj'
+    #T_MEDIUM = OBJ_PATH + 'tugs/large/misc/misc.obj'
+        
     T_LARGE = OBJ_PATH + 'tugs/large/%i/object.obj' % randint(1,3)
     T_MILI  = OBJ_PATH + 'tugs/military/1/object.obj'
     
@@ -138,30 +145,31 @@ class Config:
     F_SMALL = OBJ_PATH + 'fuel/small/1/object.obj'
 
     # Class defaults
-    defaults = { 'ABC':    { 'tug':    T_LARGE,
-                           'tpower':  400,
+    defaults = { 'ABC':   { # TBL600 522 kW
+                           'tug':     T_LARGE,
+                           'tpower':  692,
                            'truck':   F_LARGE,
-                           'flow':   800,
+                           'flow':    800,
                           },
-                'D':     { 'tug':    T_MEDIUM,
+                'D':     { 'tug':     T_MEDIUM,
                            'truck':   F_MEDIUM,
                            'tpower':  80,
-                           'flow':   600,
+                           'flow':    600,
                           },
                  'E':     { 'tug':    T_SMALL,
                            'tpower':  70,
                            'truck':   F_MEDIUM,
-                           'flow':   400,
+                           'flow':    400,
                           },
                  'F':     { 'tug':    T_SMALL,
-                           'tpower':  4,
+                           'tpower':  10,
                            'truck':   F_SMALL,
-                           'flow':   10,
+                           'flow':    10,
                           },
-                 'GA':     { 'tug':    T_SMALL,
+                 'GA':     { 'tug':   T_SMALL,
                            'tpower':  4,
                            'truck':   F_SMALL,
-                           'flow':   10,
+                           'flow':    10,
                           },
                 }
 
@@ -300,14 +308,20 @@ class PythonInterface:
     
     def XPluginReceiveMessage(self, inFromWho, inMessage, inParam):
         if (inFromWho == XPLM_PLUGIN_XPLANE):
-            if (inParam == XPLM_PLUGIN_XPLANE and inMessage == XPLM_MSG_PLANE_LOADED):# On aircraft change
-                # On plane load
-                pass
-            elif (inParam == XPLM_PLUGIN_XPLANE and inMessage == XPLM_MSG_AIRPORT_LOADED ): # On aiport load
-                self.reset()
-                self.tailnum = self.acf.tailNumber.value[0]
-                self.conf.getConfig(self.acf.getClass())
-                plane, plane_path = XPLMGetNthAircraftModel(0)
+            if inParam == XPLM_PLUGIN_XPLANE: 
+                if inMessage == XPLM_MSG_PLANE_LOADED:# On aircraft change
+                    # On plane load
+                    pass
+                elif inMessage == 106:# On aircraft unload
+                    # On plane unload
+                    if DEBUG:
+                        print "Plane unloaded"
+                    pass
+                elif inMessage == XPLM_MSG_AIRPORT_LOADED: # On aiport load
+                    self.reset()
+                    self.tailnum = self.acf.tailNumber.value[0]
+                    self.conf.getConfig(self.acf.getClass())
+                    plane, plane_path = XPLMGetNthAircraftModel(0)
         
     def mainMenuCB(self, menuRef, menuItem):
         '''
@@ -319,7 +333,7 @@ class PythonInterface:
             self.PushBack("Request")
             
         elif menuItem == 3:
-            if not self.stairStatus: 
+            if not self.stairStatus:
                 self.stairsC('come')
                 self.stairStatus = True
             else:
@@ -352,26 +366,32 @@ class PythonInterface:
         
         x += 20
         # distance
-        XPCreateWidget(x+20, y-40, x+40, y-60, 1, 'Distance', 0, window, xpWidgetClass_Caption)
-        self.pusbackDistInput = XPCreateWidget(x+70, y-40, x+130, y-62, 1, '90', 0, window, xpWidgetClass_TextField)
+        XPCreateWidget(x+20, y-40, x+40, y-60, 1, 'Distance (m)', 0, window, xpWidgetClass_Caption)
+        self.pusbackDistInput = XPCreateWidget(x+70, y-40, x+130, y-62, 1, '80', 0, window, xpWidgetClass_TextField)
         XPSetWidgetProperty(self.pusbackDistInput, xpProperty_TextFieldType, xpTextEntryField)
         XPSetWidgetProperty(self.pusbackDistInput, xpProperty_Enabled, 1)
         
         y -= 30
         
         # rotation
-        XPCreateWidget(x+20, y-40, x+40, y-60, 1, 'Rotation', 0, window, xpWidgetClass_Caption)
-        self.pusbackRotInput = XPCreateWidget(x+70, y-40, x+130, y-62, 1, '80', 0, window, xpWidgetClass_TextField)
+        XPCreateWidget(x+20, y-40, x+40, y-60, 1, 'Rotation (deg)', 0, window, xpWidgetClass_Caption)
+        self.pusbackRotInput = XPCreateWidget(x+70, y-40, x+130, y-62, 1, '90', 0, window, xpWidgetClass_TextField)
         XPSetWidgetProperty(self.pusbackRotInput, xpProperty_TextFieldType, xpTextEntryField)
         XPSetWidgetProperty(self.pusbackRotInput, xpProperty_Enabled, 1)
         
         y-= 25
         
-        # Default checkbox
-        XPCreateWidget(x+20, y-40, x+40, y-60, 1, 'Nose Right', 0, window, xpWidgetClass_Caption)
-        self.pusbackRightCheck = XPCreateWidget(x+90, y-40, x+100, y-60, 1, "", 0, window, xpWidgetClass_Button)
+        # NoseRight checkbox
+        XPCreateWidget(x, y-40, x+20, y-60, 1, 'Nose Right', 0, window, xpWidgetClass_Caption)
+        self.pusbackRightCheck = XPCreateWidget(x+70, y-40, x+80, y-60, 1, "", 0, window, xpWidgetClass_Button)
         XPSetWidgetProperty(self.pusbackRightCheck, xpProperty_ButtonType, xpRadioButton)
         XPSetWidgetProperty(self.pusbackRightCheck, xpProperty_ButtonBehavior, xpButtonBehaviorCheckBox)
+        
+        # Tow checkbox
+        XPCreateWidget(x+90, y-40, x+130, y-60, 1, 'Tow', 0, window, xpWidgetClass_Caption)
+        self.pusbackTow = XPCreateWidget(x+120, y-40, x+130, y-60, 1, "", 0, window, xpWidgetClass_Button)
+        XPSetWidgetProperty(self.pusbackTow, xpProperty_ButtonType, xpRadioButton)
+        XPSetWidgetProperty(self.pusbackTow, xpProperty_ButtonBehavior, xpButtonBehaviorCheckBox)
         
         y-= 20
         
@@ -544,6 +564,11 @@ class PythonInterface:
             self.acf.fuelTanks.value = tank
             
             self.ReFuelWindowRefresh()
+            # Tank last
+            if self.refuel[i] <= 0:
+                # tank switch delay
+                return 2 
+            
             return REFUEL_INTERVAL
         else:
             self.Refuel("Stop")
@@ -575,9 +600,18 @@ class PythonInterface:
             
             right = XPGetWidgetProperty(self.pusbackRightCheck, xpProperty_ButtonState, None)
             if right:
-                self.pusbackDir =-1
+                self.pushbackTurnDir =-1
             else:
-                self.pusbackDir = 1
+                self.pushbackTurnDir = 1
+            
+            # Push or tow    
+            tow = XPGetWidgetProperty(self.pusbackTow, xpProperty_ButtonState, None)
+            if tow:
+                self.pushbackDir = -1
+                self.pushbackTurnDir *= -1
+            else:
+                self.pushbackDir = 1
+            
             # Clear other actions
             objects = [self.fuelTruck, self.stairsC, self.gpuTruck]
             for obj in objects: obj('go')
@@ -611,7 +645,7 @@ class PythonInterface:
                 self.pushbackMaxSpeed = 4
             else:
                 # walking speed
-                self.pushbackMaxSpeed = 1.39
+                self.pushbackMaxSpeed = 3
         
             self.pusbackWaitBrakes = False
             
@@ -623,6 +657,7 @@ class PythonInterface:
                 self.acf.brakeOverride.value = 1
                 self.acf.throttleOverride.value = 1
                 self.pusbackStatus = 'Autopilot'
+                print "MANUAL"
             
             # Center yoke
             self.acf.yokeHeading.value = 0
@@ -659,7 +694,6 @@ class PythonInterface:
         if (self.acf.pbrake.value):
             if (not self.pusbackWaitBrakes):
                 self.acf.brakeOverride.value = 0
-                #self.acf.throttleOverride.value = 0
                 self.PushBack('Stop', True)
                 return 0
             else:
@@ -672,60 +706,68 @@ class PythonInterface:
             self.pushbackTime = elapsedSim
         
         maxSpeed = self.pushbackMaxSpeed
-        dist = 100
-        init = 0
+        gspeed      = self.acf.groundspeed.value
+        
+        #Overspeed
+        if gspeed > (maxSpeed * 1.5): 
+            self.PushBack('Stop', True)
+            return 0
+        
+        # detect reverse direction
+        if self.pushbackDir > 0: 
+            if abs(c.shortHdg(self.acf.psi.value, self.acf.hpath.value)) < 90: gspeed *= -1
+        elif abs(c.shortHdg(self.acf.psi.value, self.acf.hpath.value)) > 90: gspeed *= -1 
+        
         
         if self.pusbackStatus == 'Start':
-        
-            gspeed      = self.acf.groundspeed.value
+
             dist        = self.acf.getPointDist(self.pusbackInitPos)
             targetSpeed = sin(3*(self.pusbackDist - dist)/self.pusbackDist) * maxSpeed
             init        = self.pusbackDist
             
-            #if rotation 1-0.8x^4
-            x = (self.pusbackDist - dist)/self.pusbackDist
-            # Start
+            x = c.limit((self.pusbackDist - dist)/self.pusbackDist)
+            
             if x > 0.5:
                 targetSpeed = (1-0.9*x**4) * maxSpeed
             else:
                 targetSpeed  =  (1-(1-x)**8) * maxSpeed
             
-            dist        += self.acf.gearDist 
-            
+            dist        += self.acf.gearDist
             
         ## Rotation  
         elif self.pusbackStatus == 'Rotate':
             # rotation speed
             rotation    = self.pusbackAngle
-            gspeed      = abs(self.acf.gearDist * abs(self.acf.rotation.value)) + self.acf.groundspeed.value
-            # togo
+            # add rotation speed
+            gspeed      += abs(self.acf.gearDist * abs(self.acf.rotation.value))
             init        = rotation
-            # distance
             dist        = abs(init - c.fullHdg(self.acf.get()[4], (self.pusbackInitPos[4] + rotation) %360))
             
-            x = (rotation - dist)/rotation
-            if x > 1:
-                x = 1
-            if x < 0:
-                x = 0
-            targetSpeed = (x**0.3-0.3*x) * maxSpeed
-            
+            x = c.limit((rotation - dist)/rotation)
+            # Slow down GA
+            if self.acf.gearDist < 3: x *= 0.3
+            if x > 0:
+                targetSpeed = (x**0.3-0.3*x) * maxSpeed
+            else:
+                targetSpeed = 0.0
+                
             if not self.pusbackReference:
                 self.pusbackReference = self.acf.get()
                 if DEBUG:
                     print "TURN"
         
-            turnRatio = self.acf.getPointDist(self.pusbackReference) / self.acf.gearDist
-            if 0 <= turnRatio <=1:
-                self.acf.yokeHeading.value = (turnRatio**2) * self.pusbackDir
+            turnRatio = c.limit(self.acf.getPointDist(self.pusbackReference) / self.acf.gearDist)
+            if turnRatio < 0: turnRatio = 0
+            self.acf.yokeHeading.value = (turnRatio**2) * self.pushbackTurnDir
             # Finalize rotation
-            if (rotation - dist) < 15:
-                self.acf.yokeHeading.value = ((rotation - dist)/15)**0.8 * self.pusbackDir
-            #time = elapsedSim - self.pushbackTime
-            #stime = '%2.0f:%2.0f:%2.0f' % (time/60, time%60, time*10%60)
-            #print '%s distance: %f/%f, speed: %f, targetSpeed: %f, power: %.0f' % (stime, dist, init, gspeed*c.MS2KMH, targetSpeed*c.MS2KMH, 0)
+            rleft = rotation - dist
+            if rleft < 0:
+                self.PushBack('Stop', True)
+                return 0
+            if rleft < 15:
+                self.acf.yokeHeading.value = (rleft/15)**0.8 * self.pushbackTurnDir
             
-        ## Push status change
+        ## Pushback phase change
         if dist + 0.1 > init:
             if  not self.conf.tug.autopilot:
                 pass
@@ -739,55 +781,54 @@ class PythonInterface:
         if (elapsedMe < 4):
             power = self.conf.tpower
             self.count += 1
-            
             if self.conf.tug.autopilot:
-                x = (targetSpeed - gspeed)/maxSpeed
-               
+                x = c.limit((targetSpeed - gspeed)/maxSpeed)
+                if DEBUG and (self.count %30) == 0:print x
                 if targetSpeed > gspeed:
                     # Gas curve
                     power *= x**0.5
                 else: 
-                    # Brakes (maxPower/4)
+                    # Brakes (aprox maxPower/4)
                     power *= 0.25*x**3
+                    if DEBUG and (self.count %30) == 0:print "brake"
             else:
                 # Let the user control the throttle
                 power *=  self.acf.throttle.value[0]
-                # drag
                 gspeed = abs(self.acf.gearDist * abs(self.acf.rotation.value)) + self.acf.groundspeed.value
-                #1-0.5x^2
-                power *= 1-0.5*(gspeed/maxSpeed)**2 
-                #power = 0
-                #self.acf.throttleOverride.value = 1
-                #self.acf.throttleUse.value = [0.0]*8
                 pass
 
             # Debug
             if DEBUG and (self.count %30) == 0: 
                 time = elapsedSim - self.pushbackTime
                 stime = '%2.0f:%2.0f:%2.0f' % (time/60, time%60, time*10%60)
+                #targetSpeed = 0
                 print '%s distance: %f/%f, speed: %f, targetSpeed: %f, power: %.0f' % (stime, dist, init, gspeed, targetSpeed, power/self.conf.tpower *100)
-            
             # Add power to plane
             
+            #drag
+            drag = self.conf.tpower * gspeed/maxSpeed*0.25
+            power -= drag
             a = radians(self.acf.psi.value) + 180 % 360
             h = power / self.acf.m_total.value * elapsedMe
-            # angular vel
+            
+            # substract angular vel
             av = sin(radians(self.acf.yokeHeading.value * self.acf.gearMaxSteer.value)) /self.acf.gearDist * h
             yv = cos(radians(self.acf.yokeHeading.value * self.acf.gearMaxSteer.value)) * h
             
-            self.acf.rotation.value -= av
-            self.acf.vx.value -= cos(a) * yv
-            self.acf.vz.value -= sin(a) * yv
+            self.acf.rotation.value -= av * self.pushbackDir
+            self.acf.vx.value -= cos(a) * yv * self.pushbackDir
+            self.acf.vz.value -= sin(a) * yv * self.pushbackDir
             
             if DEBUG and (self.count %30) == 0: 
                 print "av: %f, xv: %f, yv: %f" % (self.acf.rotation.value, self.acf.vx.value,  self.acf.vz.value)
-                print "power: %f av: %f, yv: %f" % (h, av, yv) 
+                print "power: %f, drag: %f, av: %f, yv: %f" % (power, drag, av, yv)
+                #print "psi: %f, beta: %f, diff: %f" % (self.acf.psi.value, self.acf.hpath.value, c.shortHdg(self.acf.psi.value, self.acf.hpath.value))
         
         if self.tug:
-            # Stick tuck to aircraft
+            # Stick tug to aircraft
             gear = self.acf.getGearcCoord(0)
-            psi = self.acf.tire_steer_act.value[0]
-            pos = self.acf.getPointAtHdg(TUG_OFFSET, psi, gear)
+            psi  = self.acf.tire_steer_act.value[0]
+            pos  = self.acf.getPointAtHdg(TUG_OFFSET, psi, gear)
             self.tug.setPos(pos, True)
             self.tug.psi += psi
         
@@ -1035,10 +1076,13 @@ class Aircraft:
         self.vy = EasyDref('sim/flightmodel/position/local_vy', 'float')
         self.vz = EasyDref('sim/flightmodel/position/local_vz', 'float')
         
+        # path heading
+        self.hpath = EasyDref('sim/flightmodel/position/hpath', 'float')
+        
         # acceleration
-        self.ax = EasyDref('sim/flightmodel/position/local_ax', 'float')
-        self.ay = EasyDref('sim/flightmodel/position/local_ay', 'float')
-        self.az = EasyDref('sim/flightmodel/position/local_az', 'float')
+        #self.ax = EasyDref('sim/flightmodel/position/local_ax', 'float')
+        #self.ay = EasyDref('sim/flightmodel/position/local_ay', 'float')
+        #self.az = EasyDref('sim/flightmodel/position/local_az', 'float')
         
         # brakes
         self.pbrake = EasyDref('sim/flightmodel/controls/parkbrake', 'float')
@@ -1081,8 +1125,8 @@ class Aircraft:
         self.gear = EasyDref('sim/flightmodel/parts/tire_z_no_deflection[0:10]', 'float')
         
         # Gpu
-        self.gpuOn = EasyDref('sim/cockpit/electrical/gpu_on', 'int')
-        self.gpuAmps = EasyDref('sim/cockpit/electrical/gpu_amps', 'float')
+        self.gpuOn   = EasyDref('sim/cockpit/electrical/gpu_on', 'int')
+        #self.gpuAmps = EasyDref('sim/cockpit/electrical/gpu_amps', 'float')
         
         # Door position
         self.doorX = EasyDref('sim/aircraft/view/acf_door_x', 'float')
@@ -1284,7 +1328,7 @@ class SceneryObject:
             if self.totHeading != 0 and pos[4] != self.goTo[4]:
                 a = c.shortHdg(pos[4], self.goTo[4])
                 
-                tohd = a/self.time * elapsedMe
+                tohd = a/self.time * elapsedMe * 4
                 pos[4] += tohd
                 pos[4] += 360 % 360
                             
@@ -1335,7 +1379,7 @@ class SceneryObject:
             self.floor = 0
             info = []
             XPLMProbeTerrainXYZ(self.ProbeRef, pos[0], pos[1], pos[2], info)
-            self.x, self.y, self.z = info[1], info[2] ,info[3]
+            self.x, self.y, self.z = info[1], info[2],info[3]
             self.theta, self.psi, self.phi = info[4], pos[4], info[5]
         else:
              self.x, self.y, self.z, self.theta, self.psi, self.phi = tuple(pos)
