@@ -36,7 +36,7 @@ from random import randint
 from math import *
 import cPickle
 
-DEBUG=True
+DEBUG=False
 
 # False constants
 VERSION='ALPHA-2'
@@ -162,7 +162,7 @@ class Config:
                     'desc':     'Douglas-Kalmar TBL-180',
                     'mspeed':   3.2,
                     'weight':   2000,
-                    'gdist':    6,
+                    'gdist':    7,
                    },
             'tbl50':
                     {'name':    'TBL180',
@@ -190,11 +190,11 @@ class Config:
                            'truck':   F_LARGE,
                            'flow':    800,
                           },
-                'DE':     { 'tug':    tugs['tbl180'],
+                'D':     { 'tug':    tugs['tbl180'],
                            'truck':   F_MEDIUM,
                            'flow':    600,
                           },
-                 'F':     { 'tug':    tugs['tbl50'],
+                 'EF':     { 'tug':    tugs['tbl50'],
                            'truck':   F_SMALL,
                            'flow':    10,
                           },
