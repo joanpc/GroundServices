@@ -36,7 +36,7 @@ from random import randint
 from math import *
 import cPickle
 
-DEBUG=False
+DEBUG=True
 
 # False constants
 VERSION='ALPHA-2'
@@ -137,37 +137,68 @@ class Config:
     T_MEDIUM = OBJ_PATH + 'tugs/large/4/object.obj'
     #T_MEDIUM = OBJ_PATH + 'tugs/large/misc/misc.obj'
         
-    T_LARGE = OBJ_PATH + 'tugs/large/%i/object.obj' % randint(1,3)
+    T_LARGE  = OBJ_PATH + 'tugs/large/%i/object.obj' % 3
+    T_LARGED = OBJ_PATH + 'tugs/large/%i/object.obj' % 2
     T_MILI  = OBJ_PATH + 'tugs/military/1/object.obj'
     
     F_LARGE = OBJ_PATH + 'fuel/large/%i/object.obj' % randint(1,8)
     F_MEDIUM   = OBJ_PATH + 'fuel/medium/%i/object.obj' % randint(1,9)
     F_SMALL = OBJ_PATH + 'fuel/small/1/object.obj'
-
+    
+    ## Avaliable tugs
+    tugs = {'tbl600':
+                    {'name':     'TBL600',
+                    'obj':      T_LARGED,
+                    'power':    567,
+                    'desc':     'Douglas-Kalmar TBL-600',
+                    'mspeed':   3.2,
+                    'weight':   6000,
+                    'gdist':    5,
+                   },
+            'tbl180':
+                    {'name':    'TBL180',
+                    'obj':      T_LARGE,
+                    'power':    82,
+                    'desc':     'Douglas-Kalmar TBL-180',
+                    'mspeed':   3.2,
+                    'weight':   2000,
+                    'gdist':    6,
+                   },
+            'tbl50':
+                    {'name':    'TBL180',
+                    'obj':      T_MEDIUM,
+                    'power':    72,
+                    'desc':     'Douglas-Kalmar TBL-180',
+                    'mspeed':   3.2,
+                    'weight':   1500,
+                    'gdist':    5,
+                   },
+            'manual':
+                    {'name':     'manual',
+                    'obj':      T_SMALL,
+                    'power':    1,
+                    'desc':     'manual tow',
+                    'mspeed':   3.2,
+                    'weight':   30,
+                    'gdist':    5,
+                   },
+                    
+    }
     # Class defaults
     defaults = { 'ABC':   { # TBL600 522 kW
-                           'tug':     T_LARGE,
-                           'tpower':  692,
+                           'tug':     tugs['tbl600'],
                            'truck':   F_LARGE,
                            'flow':    800,
                           },
-                'D':     { 'tug':     T_MEDIUM,
+                'DE':     { 'tug':    tugs['tbl180'],
                            'truck':   F_MEDIUM,
-                           'tpower':  80,
                            'flow':    600,
                           },
-                 'E':     { 'tug':    T_SMALL,
-                           'tpower':  70,
-                           'truck':   F_MEDIUM,
-                           'flow':    400,
-                          },
-                 'F':     { 'tug':    T_SMALL,
-                           'tpower':  10,
+                 'F':     { 'tug':    tugs['tbl50'],
                            'truck':   F_SMALL,
                            'flow':    10,
                           },
-                 'GA':     { 'tug':   T_SMALL,
-                           'tpower':  4,
+                 'GA':     { 'tug':   tugs['manual'],
                            'truck':   F_SMALL,
                            'flow':    10,
                           },
@@ -181,17 +212,12 @@ class Config:
         self.obj = Empty()
         self.tug = Empty()
         
-        self.obj.truck  = self.defaults['ABC']['truck']
-        self.obj.tug    = self.defaults['ABC']['tug']
-        self.flow       = self.defaults['ABC']['flow'] * c.GPM2KPM
-        self.tpower     = self.defaults['ABC']['tpower'] * c.HP2W
-
         self.obj.stairs = OBJ_PATH + 'stairs/1/object.obj'
         self.obj.bus    = OBJ_PATH + 'busses_coaches/minibusses/swissport/1/object.obj'
         self.obj.gpu    = OBJ_PATH + 'gpus/1/object.obj'
     
         self.tug.autopilot = True
-    
+        self.getConfig('A')
     def getConfig(self, acfClass = False):
         '''
         Todo, get config..
@@ -200,10 +226,11 @@ class Config:
             for k in self.defaults:
                 if acfClass in k:
                     self.obj.truck  = self.defaults[k]['truck']
-                    self.obj.tug    = self.defaults[k]['tug']
+                    self.obj.tug    = self.defaults[k]['tug']['obj']
+                    self.tpower     = self.defaults[k]['tug']['power'] * 1000
+                    self.tgearDist  = self.defaults[k]['tug']['gdist']
+                    self.tweight    = self.defaults[k]['tug']['weight']
                     self.flow       = self.defaults[k]['flow'] * c.GPM2KPM
-                    self.tpower     = self.defaults[k]['tpower'] * c.HP2W
-                    
                     if DEBUG:
                         print self.defaults[k]
                     break
@@ -593,9 +620,11 @@ class PythonInterface:
             buff = []
             XPGetWidgetDescriptor(self.pusbackDistInput, buff, 256)
             self.pusbackDist    = self.float(buff[0])
+            if self.pusbackDist < 1: self.pusbackDist = 1
             buff = []
             XPGetWidgetDescriptor(self.pusbackRotInput, buff, 256)
             a = float(buff[0])
+            if a < 1: a = 1
             self.pusbackAngle   = abs(a)
             
             right = XPGetWidgetProperty(self.pusbackRightCheck, xpProperty_ButtonState, None)
@@ -698,7 +727,7 @@ class PythonInterface:
                 return 0
             else:
                 # wait for release
-                return 1
+                return -1
         
         # Start push back
         if not self.pusbackStatus:
@@ -733,6 +762,11 @@ class PythonInterface:
                 targetSpeed  =  (1-(1-x)**8) * maxSpeed
             
             dist        += self.acf.gearDist
+            
+            # maintain heading
+            dev = c.limit(c.shortHdg(self.pusbackInitPos[4], self.acf.psi.value)/10)
+            self.acf.yokeHeading.value = -dev**3
+            if DEBUG and (self.count %30) == 0:  print dev
             
         ## Rotation  
         elif self.pusbackStatus == 'Rotate':
@@ -778,7 +812,7 @@ class PythonInterface:
                 return 0
             
         # Accelerate aircraft
-        if (elapsedMe < 4):
+        if (elapsedMe < 1):
             power = self.conf.tpower
             self.count += 1
             if self.conf.tug.autopilot:
@@ -809,7 +843,7 @@ class PythonInterface:
             drag = self.conf.tpower * gspeed/maxSpeed*0.25
             power -= drag
             a = radians(self.acf.psi.value) + 180 % 360
-            h = power / self.acf.m_total.value * elapsedMe
+            h = power / (self.acf.m_total.value + self.conf.tweight)* elapsedMe
             
             # substract angular vel
             av = sin(radians(self.acf.yokeHeading.value * self.acf.gearMaxSteer.value)) /self.acf.gearDist * h
@@ -828,7 +862,7 @@ class PythonInterface:
             # Stick tug to aircraft
             gear = self.acf.getGearcCoord(0)
             psi  = self.acf.tire_steer_act.value[0]
-            pos  = self.acf.getPointAtHdg(TUG_OFFSET, psi, gear)
+            pos  = self.acf.getPointAtHdg(self.conf.tgearDist, psi, gear)
             self.tug.setPos(pos, True)
             self.tug.psi += psi
         
@@ -925,13 +959,13 @@ class PythonInterface:
             self.tug = SceneryObject(self, self.conf.obj.tug)
                     
         y = self.acf.ly
-        gear = self.acf.getGearcCoord()
+        gear = self.acf.getGearcCoord(self.conf.tgearDist)
         
         path = [ (self.acf.getPointAtHdg(6, 0, gear), 5),
-                (self.acf.getPointAtHdg(10 + TUG_OFFSET, 0, gear), TUG_OFFSET),
+                (self.acf.getPointAtHdg(10 + self.conf.tgearDist, 0, gear), self.conf.tgearDist),
                 (gear, 5, self.acf.psi.value)
               ]
-        backcourse = [(self.acf.getGearcCoord(10 + TUG_OFFSET) , 5),
+        backcourse = [(self.acf.getGearcCoord(10 + self.conf.tgearDist) , 5),
                       (self.acf.getPointAtHdg(20, 45), 2),
                        (self.acf.getPointAtHdg(50, 94), 3),
                        (self.acf.getPointAtHdg(64, 130), 3)
