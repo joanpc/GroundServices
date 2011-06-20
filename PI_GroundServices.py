@@ -196,11 +196,11 @@ class Config:
                           },
                  'EF':     { 'tug':    tugs['tbl50'],
                            'truck':   F_SMALL,
-                           'flow':    10,
+                           'flow':    400,
                           },
                  'GA':     { 'tug':   tugs['manual'],
                            'truck':   F_SMALL,
-                           'flow':    10,
+                           'flow':    50,
                           },
                 }
 
