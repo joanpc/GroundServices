@@ -112,7 +112,7 @@ class c:
         if b == 360: b = 0
         cw = (b - a)
         ccw = (360 - b + a);
-        if cw < ccw:
+        if abs(cw) < abs(ccw):
             return cw
         return -ccw
     @classmethod
@@ -128,7 +128,10 @@ class c:
         if      x > lim: return lim
         elif    x < -lim: return -lim
         else:   return x
-    
+    @classmethod
+    def stime(self, sec):
+        # returns formated seconds
+        return '%s:%s:%s' % ( str(round(sec/3600,3)).split('.')[0], str(round(sec%3600/60,3)).split('.')[0], str(round(sec%3600%60,3)).split('.')[0])
 class Config:
     
     #Avaliable objects
@@ -147,7 +150,7 @@ class Config:
     
     ## Avaliable tugs
     tugs = {'tbl600':
-                    {'name':     'TBL600',
+                    {'name':    'TBL600',
                     'obj':      T_LARGED,
                     'power':    567,
                     'desc':     'Douglas-Kalmar TBL-600',
@@ -176,7 +179,7 @@ class Config:
             'manual':
                     {'name':     'manual',
                     'obj':      T_SMALL,
-                    'power':    1,
+                    'power':    4,
                     'desc':     'manual tow',
                     'mspeed':   3.2,
                     'weight':   30,
@@ -265,7 +268,7 @@ class PythonInterface:
         
         self.tailnum = ''
         
-        # Main floop
+        # Fuel floop
         self.RefuelFloopCB = self.RefuelCallback
         XPLMRegisterFlightLoopCallback(self, self.RefuelFloopCB, 0, 0)
         
@@ -273,11 +276,15 @@ class PythonInterface:
         self.PushbackCB = self.pushBackCallback
         XPLMRegisterFlightLoopCallback(self, self.PushbackCB, 0, 0)
         
+        # Main Floop
+        self.mainCB = self.mainCallback
+        XPLMRegisterFlightLoopCallback(self, self.mainCB, 60, 0)
+        
         # Aicraft data access
         self.acf = Aircraft()
         
         # Scenery objects
-        self.pos , self.truck, self.tug, self.stairs, self.bus, self.gpu = tuple([False]) * 6
+        self.refuel, self.pos , self.truck, self.tug, self.stairs, self.bus, self.gpu = tuple([False]) * 7
         self.stairStatus, self.gpuStatus = False, False
         
         # Init config
@@ -325,6 +332,7 @@ class PythonInterface:
             
         XPLMUnregisterFlightLoopCallback(self, self.RefuelFloopCB, 0)
         XPLMUnregisterFlightLoopCallback(self, self.PushbackCB, 0)
+        XPLMUnregisterFlightLoopCallback(self, self.mainCB, 0)
         pass
         
     def XPluginEnable(self):
@@ -358,22 +366,22 @@ class PythonInterface:
             self.Refuel("Request")
         elif menuItem == 2:
             self.PushBack("Request")
-            
         elif menuItem == 3:
-            if not self.stairStatus:
-                self.stairsC('come')
-                self.stairStatus = True
-            else:
-                self.stairsC('go')
-                self.stairStatus = False
+            self.stairsC('toggle')
         elif menuItem == 4:
-            if not self.gpuStatus: 
-                self.gpuTruck('come')
-                self.gpuStatus = True
-            else:
-                self.gpuTruck('go')
-                self.gpuStatus = False
-
+            self.gpuTruck('toggle')
+    
+    def mainCallback(self, elapsedMe, elapsedSim, counter, refcon):
+        '''
+        Check each minute if we can earse distant objects
+        '''
+        if len(SceneryObject.objects):
+            for object in SceneryObject.objects: 
+                if self.acf.getPointDist(object.getPos()) > 500:
+                    object.destroy()
+            return 60
+        return 0
+        
     def CreatePushBackWindow(self, x, y, w, h):
         x2 = x + w
         y2 = y - h
@@ -514,6 +522,9 @@ class PythonInterface:
         # tank  total label
         XPCreateWidget(x+130, y-40, x+280, y-62, 1, '/ %.0f ' % (total *c.KG2LB), 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
         
+        # ETA
+        self.reFuelETA = XPCreateWidget(x+20, y-75, x+60, y-93, 1, '', 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
+        
         # TODO: request total    
         #XPCreateWidget(x+190, y-40, x+250, y-62, 1, '', 0, self.ReFuelWindowWidget, xpWidgetClass_TextField)
         #XPSetWidgetProperty(tankInput, xpProperty_TextFieldType, xpTextEntryField)
@@ -544,6 +555,13 @@ class PythonInterface:
                 XPSetWidgetDescriptor(self.reFuelTankLabel[i], "%.0f" % (tank[i] * c.KG2LB))
                 total += tank[i]
             XPSetWidgetDescriptor(self.reFuelTankTotal, "%.0f" % (total * c.KG2LB))
+            
+            if self.refuel:
+                tofuel = sum(self.refuel)
+                if tofuel > 0: 
+                    eta = c.stime( tofuel / self.conf.flow * 60)
+                    XPSetWidgetDescriptor(self.reFuelETA, "ETA: " + eta)
+                else: XPSetWidgetDescriptor(self.reFuelETA, "")
         
     def ReFuelWindowHandler(self, inMessage, inWidget, inParam1, inParam2):
         if (inMessage == xpMessage_CloseButtonPushed):
@@ -761,12 +779,14 @@ class PythonInterface:
             else:
                 targetSpeed  =  (1-(1-x)**8) * maxSpeed
             
-            dist        += self.acf.gearDist
+            dist += self.acf.gearDist
             
             # maintain heading
-            dev = c.limit(c.shortHdg(self.pusbackInitPos[4], self.acf.psi.value)/10)
+            dev = c.limit(c.shortHdg(self.acf.psi.value, self.pusbackInitPos[4])/10)
             self.acf.yokeHeading.value = -dev**3
-            if DEBUG and (self.count %30) == 0:  print dev
+            
+            if DEBUG and (self.count %30) == 0:
+                print "init: %f, psi: %f, short: %f, dev: %f" % (self.pusbackInitPos[4], self.acf.psi.value, c.shortHdg(self.acf.psi.value, self.pusbackInitPos[4]) ,  dev)
             
         ## Rotation  
         elif self.pusbackStatus == 'Rotate':
@@ -833,13 +853,10 @@ class PythonInterface:
 
             # Debug
             if DEBUG and (self.count %30) == 0: 
-                time = elapsedSim - self.pushbackTime
-                stime = '%2.0f:%2.0f:%2.0f' % (time/60, time%60, time*10%60)
-                #targetSpeed = 0
+                stime = c.stime(elapsedSim - self.pushbackTime)
                 print '%s distance: %f/%f, speed: %f, targetSpeed: %f, power: %.0f' % (stime, dist, init, gspeed, targetSpeed, power/self.conf.tpower *100)
             # Add power to plane
             
-            #drag
             drag = self.conf.tpower * gspeed/maxSpeed*0.25
             power -= drag
             a = radians(self.acf.psi.value) + 180 % 360
@@ -891,6 +908,7 @@ class PythonInterface:
                 self.fuelTruck('go')
             XPLMSetFlightLoopCallbackInterval(self, self.RefuelFloopCB, 0, 0, 0)
             if self.reFuelWindow:
+                XPSetWidgetDescriptor(self.reFuelETA, "")
                 XPHideWidget(self.CancelReFuelButton)
                 XPShowWidget(self.ReFuelButton)
             self.acf.fuelCap.value = 0
@@ -932,8 +950,9 @@ class PythonInterface:
         '''
         Controls Fuel truck
         '''
-        if not self.truck:
+        if not self.truck or not self.truck.enabled:
             self.truck = SceneryObject(self, self.conf.obj.truck)
+            self.lop = ''
         
         init = self.acfP(84, 40)
         
@@ -955,8 +974,9 @@ class PythonInterface:
         '''
         Controls Tug object
         '''
-        if not self.tug:
+        if not self.tug or not self.tug.enabled:
             self.tug = SceneryObject(self, self.conf.obj.tug)
+            self.lop = ''
                     
         y = self.acf.ly
         gear = self.acf.getGearcCoord(self.conf.tgearDist)
@@ -989,8 +1009,9 @@ class PythonInterface:
         Controls Stairs
         '''
         
-        if not self.stairs:
+        if not self.stairs or not self.stairs.enabled:
             self.stairs = SceneryObject(self, self.conf.obj.stairs)
+            self.lop = ''
         
         door = self.acf.getDoorCoord(0)
         hinv =  door[4] + 90%360
@@ -1007,6 +1028,10 @@ class PythonInterface:
                       (init , 5),
                       ]
         
+        if op == 'toggle':
+            if self.stairs.lop == 'come': op = 'go'
+            else: op = 'come'
+        
         if  op == 'come' != self.stairs.lop:
             self.stairs.setPos(init, True)
             self.stairs.show()
@@ -1022,7 +1047,7 @@ class PythonInterface:
         '''
         Controls buses
         '''
-        if not self.bus:
+        if not self.bus or not self.tug.enabled:
             self.bus = SceneryObject(self, self.conf.obj.bus)
         
         door = self.acf.getDoorCoord(20)
@@ -1045,8 +1070,9 @@ class PythonInterface:
         '''
         Controls gpu truck
         '''
-        if not self.gpu:
+        if not self.gpu or not self.gpu.enabled:
             self.gpu = SceneryObject(self, self.conf.obj.gpu)
+            self.lop = ''
         
         init = init = self.acfP(80, 40)
         pos = self.acfP(2, 19)
@@ -1057,6 +1083,9 @@ class PythonInterface:
         backcourse = [(pos2 , 5),
                       (init, 5),
                       ]
+        if op == 'toggle':
+            if self.gpu.lop == 'come': op = 'go'
+            else: op = 'come'
         if op == 'come' != self.gpu.lop:
             self.gpu.setPos(init, True)
             self.gpu.show()
@@ -1112,11 +1141,6 @@ class Aircraft:
         
         # path heading
         self.hpath = EasyDref('sim/flightmodel/position/hpath', 'float')
-        
-        # acceleration
-        #self.ax = EasyDref('sim/flightmodel/position/local_ax', 'float')
-        #self.ay = EasyDref('sim/flightmodel/position/local_ay', 'float')
-        #self.az = EasyDref('sim/flightmodel/position/local_az', 'float')
         
         # brakes
         self.pbrake = EasyDref('sim/flightmodel/controls/parkbrake', 'float')
@@ -1298,6 +1322,7 @@ class SceneryObject:
         # Main floop
         self.floop = self.floopCallback
         XPLMRegisterFlightLoopCallback(self.__class__.plugin, self.floop, 0, 0)
+        self.enabled = True
    
     def animate(self, queue, floor = True, loop = False):
         self._queue,  self.queue = queue[:], queue
@@ -1439,6 +1464,7 @@ class SceneryObject:
         XPLMSetFlightLoopCallbackInterval(self.__class__.plugin, self.floop, ANIM_RATE, 0, 0)    
         XPLMUnregisterFlightLoopCallback(self.__class__.plugin, self.floop, 0)
         XPLMUnloadObject(self.object)
+        self.enabled = False
         self = False
 
     @classmethod
