@@ -110,11 +110,16 @@ class c:
     def shortHdg(self, a, b):
         if a == 360: a = 0
         if b == 360: b = 0
-        cw = (b - a)
-        ccw = (360 - b + a);
+        d = 1
+        if a > b:
+            cw = (360 - a + b)
+            ccw = -(a - b);
+        else:
+            cw = -(360 - b + a)
+            ccw = (b - a)     
         if abs(cw) < abs(ccw):
             return cw
-        return -ccw
+        return ccw
     @classmethod
     def fullHdg(self, a, b):
         if a == 360: a = 0
@@ -131,7 +136,7 @@ class c:
     @classmethod
     def stime(self, sec):
         # returns formated seconds
-        return '%s:%s:%s' % ( str(round(sec/3600,3)).split('.')[0], str(round(sec%3600/60,3)).split('.')[0], str(round(sec%3600%60,3)).split('.')[0])
+        return '%d:%02d:%02d' % ( sec/3600, sec%3600/60, sec%3600%60 )
 class Config:
     
     #Avaliable objects
@@ -826,7 +831,9 @@ class PythonInterface:
             if  not self.conf.tug.autopilot:
                 pass
             elif  self.pusbackStatus == 'Start':
-                self.pusbackStatus = 'Rotate'
+                if self.pusbackAngle > 0:
+                    self.pusbackStatus = 'Rotate'
+                else: self.PushBack('Stop')
             elif self.pusbackStatus == 'Rotate':
                 self.PushBack('Stop')
                 return 0
@@ -986,7 +993,7 @@ class PythonInterface:
                 (gear, 5, self.acf.psi.value)
               ]
         backcourse = [(self.acf.getGearcCoord(10 + self.conf.tgearDist) , 5),
-                      (self.acf.getPointAtHdg(20, 45), 2),
+                      (self.acf.getPointAtHdg(20, 50), 2),
                        (self.acf.getPointAtHdg(50, 94), 3),
                        (self.acf.getPointAtHdg(64, 130), 3)
                      ]
@@ -1367,7 +1374,7 @@ class SceneryObject:
         self.goTo = pos
         self.time = float(time)
         
-        self.totHeading =  c.shortHdg(self.getPos()[4], self.goTo[4])
+        self.totHeading =  c.shortHdg(self.psi, self.goTo[4])
         XPLMSetFlightLoopCallbackInterval(self.__class__.plugin, self.floop, ANIM_RATE, 0, 0)    
     
     def floopCallback(self, elapsedMe, elapsedSim, counter, refcon):
@@ -1386,10 +1393,10 @@ class SceneryObject:
             
             if self.totHeading != 0 and pos[4] != self.goTo[4]:
                 a = c.shortHdg(pos[4], self.goTo[4])
-                
-                tohd = a/self.time * elapsedMe * 4
+                tohd = (a/self.time * elapsedMe)*3
                 pos[4] += tohd
-                pos[4] += 360 % 360
+                pos[4] += 360 
+                pos[4] %= 360
                             
             
             self.setPos(pos, True)
@@ -1406,7 +1413,7 @@ class SceneryObject:
             else:
                 self.goTo, self.time = next
                 self.goTo[4] = self.getHeading(self.getPos(), self.goTo)
-
+                self.totHeading = c.shortHdg(self.psi, self.goTo[4])
             return ANIM_RATE
         
         # end callback
