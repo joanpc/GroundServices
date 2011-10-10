@@ -4,36 +4,40 @@ Provides ground services with object animations using OpenSceneryX objects.
 A great way to have some movement around your plane, and do your push-back and refueling Posted Image
 
 ## Provided services
-PushBack: Selectable distance and rotation, fully automated.
-Refueling: Request the desired fuel amount for each tank.
-GPU/Stairs (animation only) the stairs may go to a wrong position if the aircraft door is not correctly defined in the .acf. I din't find any way to simulate the gpu power with the current datarefs Posted Image.
+ * PushBack: Selectable distance and rotation, fully automated.
+ * Refueling: Request the desired fuel amount for each tank.
+ * GPU/Stairs (animation only) the stairs may go to a wrong position if the aircraft door is not correctly defined in the .acf. I din't find any way to simulate the gpu power with the current datarefs Posted Image.
 
 
 ## Features
-The plugin auto assigns fuel and push-back tugs based on the weight of your plane.
-Each tug and fuel truck has its own characteristics like fuel rate or power.
-I've modeled the tug power so it should give some real feel.
-All objects are unloaded if you're far enough in order to save framerate.
+ * The plugin auto assigns fuel and push-back tugs based on the weight of your plane.
+ * Each tug and fuel truck has its own characteristics like fuel rate or power.
+ * I've modeled the tug power so it should give some real feel.
+ * All objects are unloaded if you're far enough in order to save framerate.
 
 
-# Installation
+## Installation
 
-## OpenSceneryX
+You need an updated installation of [OpenSceneryX](http://www.opensceneryx.com/) and Sandy Barbour [x-plane python interface](http://www.xpluginsdk.org/python_interface_sdk100_downloads.htm) 
 
-Install or update [OpenSceneryX](http://www.opensceneryx.com/). Some people are reporting missing objects please update-it before complaining.
+### OpenSceneryX
 
-## Installing the python interface by Sandy Barbour
+Install or update [OpenSceneryX](http://www.opensceneryx.com/). Some people are reporting missing objects please update your installation before complaining about missing objects or crashes.
 
-### Windows
-window users should install [python 2.7](http://www.python.org/ftp/python/2.7.2/python-2.7.2.msi) [64bits](http://www.python.org/ftp/python/2.7.2/python-2.7.2.amd64.msi)
-And then install [PythonInterfaceWin27.zip](http://www.xpluginsdk.org/downloads/sdk200/PythonInterfaceWin27.zip)
+### Python interface
 
-### Osx 
+Sandy's python interface requires a python installation in your computer, some OS come with python preinstalled.
+
+#### Windows
+window users must install [Python 2.7 32bit](http://www.python.org/ftp/python/2.7.2/python-2.7.2.msi), [Win 64bit](http://www.python.org/ftp/python/2.7.2/python-2.7.2.amd64.msi)
+and then [PythonInterfaceWin27.zip](http://www.xpluginsdk.org/downloads/sdk200/PythonInterfaceWin27.zip)
+
+#### Mac OSX 
 Osx comes with python preinstalled but with different versions:
 
-10.5 **Leopard**:       Comes with and old version please install [Python 2.7.2 Mac OS X 32-bit i386/PPC](http://www.python.org/ftp/python/2.7.2/python-2.7.2-macosx10.3.dmg) and then [PythonInterfaceMac27.zip](http://www.xpluginsdk.org/downloads/sdk200/PythonInterfaceMac27.zip)
-10.6 **Snow Leopard**:  Comes with **python 2.6** just install [PythonInterfaceMac26.zip](http://www.xpluginsdk.org/downloads/sdk200/PythonInterfaceMac26.zip)
-10.7 **Lion**:          Comes with **python 2.7** just install [PythonInterfaceMac27.zip](http://www.xpluginsdk.org/downloads/sdk200/PythonInterfaceMac27.zip)
+ * **Leopard** 10.5:       outdated python version, install [Python 2.7.2 Mac OS X 32-bit i386/PPC](http://www.python.org/ftp/python/2.7.2/python-2.7.2-macosx10.3.dmg) and then [PythonInterfaceMac27.zip](http://www.xpluginsdk.org/downloads/sdk200/PythonInterfaceMac27.zip)
+ * **Snow Leopard** 10.6:  **python 2.6** preinstalled install [PythonInterfaceMac26.zip](http://www.xpluginsdk.org/downloads/sdk200/PythonInterfaceMac26.zip)
+ * **Lion** 10.7:          **python 2.7** preinstalled install [PythonInterfaceMac27.zip](http://www.xpluginsdk.org/downloads/sdk200/PythonInterfaceMac27.zip)
 
 ### Linux
 Check for the your version of python:
@@ -41,18 +45,19 @@ Check for the your version of python:
      joanpc:~$ python --version
      Python 2.7.1
 
-2.6.x: download [PythonInterfaceLin26.zip](http://www.xpluginsdk.org/downloads/sdk200/PythonInterfaceLin26.zip)
-2.7.x: download [PythonInterfaceLin27.zip](http://www.xpluginsdk.org/downloads/sdk200/PythonInterfaceLin27.zip)
+ * 2.6.x: download [PythonInterfaceLin26.zip](http://www.xpluginsdk.org/downloads/sdk200/PythonInterfaceLin26.zip)
+ * 2.7.x: download [PythonInterfaceLin27.zip](http://www.xpluginsdk.org/downloads/sdk200/PythonInterfaceLin27.zip)
 
-### All versions
+### All OSs
 
 If you downloaded a python installer, run-it.
 
-Copy the contents of the PythonInterface---.zip file to your *xPlane/Resources/plugins* directory. It should look like:
+Then copy the contents of the **PythonInterface---.zip** file to your *xPlane/Resources/plugins* directory. It should look like:
+
     xPlane / Resources / plugins / Pythoninterface.ini
     xPlane / Resources / plugins / Pythoninterface---.xpl
 
-## Installing the plugin
+## Plugin installation
 
 Create a directory named **PythonScripts** in your *xPlane/Resources/plugins* folder and copy **PI_GroundServices.py** into it
 
@@ -60,12 +65,10 @@ Create a directory named **PythonScripts** in your *xPlane/Resources/plugins* fo
 
 # Notes
 
-### Known bugs: 
+### Known bugs 
 The rotation of the pushback doesn't work i you don't have a joystick plugged and assigned to the rudder.
 
-Enjoy-it and send me your comments Posted Image.
-
-### DISCLAIMER:
+### Disclaimer
 The plugin is not as finished and feature-rich as I would but it's stable. I had this file sitting around for months without adding new features but it's ready to enjoy. I'll probably add more features when I get more motivation (money sometimes is a good motivations... not always :P). The source is released under the GLP license so feel free to improve-it and send-me your patches.
 
 ### Thanks
