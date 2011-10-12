@@ -385,7 +385,7 @@ class PythonInterface:
                     object.destroy()
             return 60
         return 0
-        
+    
     def CreatePushBackWindow(self, x, y, w, h):
         x2 = x + w
         y2 = y - h
@@ -503,8 +503,8 @@ class PythonInterface:
         ratio = self.acf.tankRatio.value
         
         XPCreateWidget(x+20, y-20, x+40, y-42, 1, 'Tank #', 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
-        XPCreateWidget(x+70, y-20, x+120, y-42, 1, 'Loaded', 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
-        XPCreateWidget(x+195, y-20, x+250, y-42, 1, 'Request', 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
+        XPCreateWidget(x+70, y-20, x+120, y-42, 1, 'Loaded (lb)', 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
+        XPCreateWidget(x+195, y-20, x+250, y-42, 1, 'Request (lb)', 0, self.ReFuelWindowWidget, xpWidgetClass_Caption)
         
         # Draw tank input 
         for i in range(self.nFuelTanks):
@@ -813,7 +813,7 @@ class PythonInterface:
             
             x = c.limit((rotation - dist)/rotation)
             # Slow down GA
-            if self.acf.gearDist < 3: x *= 0.3
+            if self.acf.gearDist < 3: x *= 0.04
             if x > 0:
                 targetSpeed = (x**0.3-0.3*x) * maxSpeed
             else:
