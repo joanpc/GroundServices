@@ -39,7 +39,7 @@ import cPickle
 DEBUG=False
 
 # False constants
-VERSION='ALPHA-2'
+VERSION='ALPHA-3'
 PRESETS_FILE='WFprofiles.wfp'
 HELP_CAPTION='Profile name: '
 
@@ -110,7 +110,6 @@ class c:
     def shortHdg(self, a, b):
         if a == 360: a = 0
         if b == 360: b = 0
-        d = 1
         if a > b:
             cw = (360 - a + b)
             ccw = -(a - b);
@@ -406,26 +405,36 @@ class PythonInterface:
         
         x += 20
         # distance
-        XPCreateWidget(x+20, y-40, x+40, y-60, 1, 'Distance (m)', 0, window, xpWidgetClass_Caption)
-        self.pusbackDistInput = XPCreateWidget(x+70, y-40, x+130, y-62, 1, '80', 0, window, xpWidgetClass_TextField)
+        XPCreateWidget(x, y-40, x+40, y-60, 1, 'Distance (m)', 0, window, xpWidgetClass_Caption)
+        self.pusbackDistInput = XPCreateWidget(x+80, y-40, x+140, y-62, 1, '80', 0, window, xpWidgetClass_TextField)
         XPSetWidgetProperty(self.pusbackDistInput, xpProperty_TextFieldType, xpTextEntryField)
         XPSetWidgetProperty(self.pusbackDistInput, xpProperty_Enabled, 1)
         
         y -= 30
         
+        # Disable rotation if we don't have a joystick
+        if not self.acf.has_joystic.value:
+            rotation_default = 0;
+            rotation_enabled = 0;
+            XPCreateWidget(x, y-40, x+80, y-60, 1, 'Rotation disabled: No joystick', 0, window, xpWidgetClass_Caption)
+        else:
+            rotation_default = 90
+            rotation_enabled = 1
+                
         # rotation
-        XPCreateWidget(x+20, y-40, x+40, y-60, 1, 'Rotation (deg)', 0, window, xpWidgetClass_Caption)
-        self.pusbackRotInput = XPCreateWidget(x+70, y-40, x+130, y-62, 1, '90', 0, window, xpWidgetClass_TextField)
+        XPCreateWidget(x, y-40, x+40, y-60, rotation_enabled, 'Rotation (deg)', 0, window, xpWidgetClass_Caption)
+        self.pusbackRotInput = XPCreateWidget(x+80, y-40, x+140, y-62, rotation_enabled, str(rotation_default), 0, window, xpWidgetClass_TextField)
         XPSetWidgetProperty(self.pusbackRotInput, xpProperty_TextFieldType, xpTextEntryField)
-        XPSetWidgetProperty(self.pusbackRotInput, xpProperty_Enabled, 1)
+        XPSetWidgetProperty(self.pusbackRotInput, xpProperty_Enabled, rotation_enabled)
         
         y-= 25
         
         # NoseRight checkbox
-        XPCreateWidget(x, y-40, x+20, y-60, 1, 'Nose Right', 0, window, xpWidgetClass_Caption)
-        self.pusbackRightCheck = XPCreateWidget(x+70, y-40, x+80, y-60, 1, "", 0, window, xpWidgetClass_Button)
+        XPCreateWidget(x, y-40, x+20, y-60, rotation_enabled, 'Nose Right', 0, window, xpWidgetClass_Caption)
+        self.pusbackRightCheck = XPCreateWidget(x+70, y-40, x+80, y-60, rotation_enabled, "", 0, window, xpWidgetClass_Button)
         XPSetWidgetProperty(self.pusbackRightCheck, xpProperty_ButtonType, xpRadioButton)
         XPSetWidgetProperty(self.pusbackRightCheck, xpProperty_ButtonBehavior, xpButtonBehaviorCheckBox)
+        XPSetWidgetProperty(self.pusbackRightCheck, xpProperty_Enabled, rotation_enabled)
         
         # Tow checkbox
         XPCreateWidget(x+90, y-40, x+130, y-60, 1, 'Tow', 0, window, xpWidgetClass_Caption)
@@ -628,10 +637,10 @@ class PythonInterface:
         if op == 'Request':
             ## Pushback
             if (not self.pushbackWindow):
-                 self.CreatePushBackWindow(221, 640, 200, 165)
-                 self.pushbackWindow = True
+                self.CreatePushBackWindow(221, 640, 200, 165)
+                self.pushbackWindow = True
             elif (not XPIsWidgetVisible(self.PusbackWindowWidget)):
-                  XPShowWidget(self.PusbackWindowWidget)
+                XPShowWidget(self.PusbackWindowWidget)
             else:
                 XPHideWidget(self.PusbackWindowWidget)
             pass
@@ -985,7 +994,6 @@ class PythonInterface:
             self.tug = SceneryObject(self, self.conf.obj.tug)
             self.lop = ''
                     
-        y = self.acf.ly
         gear = self.acf.getGearcCoord(self.conf.tgearDist)
         
         path = [ (self.acf.getPointAtHdg(6, 0, gear), 5),
@@ -1060,7 +1068,7 @@ class PythonInterface:
         door = self.acf.getDoorCoord(20)
         door2 = door[:]
         door2[2] += 4
-        init = init = self.acfP(-80, 40)
+        init = self.acfP(-80, 40)
         
         path = [(door , 5),
                 (door2, 2),
@@ -1081,7 +1089,7 @@ class PythonInterface:
             self.gpu = SceneryObject(self, self.conf.obj.gpu)
             self.lop = ''
         
-        init = init = self.acfP(80, 40)
+        init = self.acfP(80, 40)
         pos = self.acfP(2, 19)
         pos2 = self.acfP(12, 20)
         path = [(pos2 , 5),
@@ -1182,11 +1190,12 @@ class Aircraft:
         # yoke
         # sim/joystick/yolk_heading_ratio
         #
+        self.has_joystic = EasyDref('sim/joystick/has_joystick', 'int')
         
         # Gear position
         # self.gear = EasyDref('sim/aircraft/parts/acf_gear_znodef[0:10]', 'float')
         # self.gear = EasyDref('sim/aircraft/parts/acf_Zarm[0:10]', 'float')
-        #self.gear = EasyDref('sim/flightmodel/parts/tire_z_no_deflection[0:10]', 'float')
+        # self.gear = EasyDref('sim/flightmodel/parts/tire_z_no_deflection[0:10]', 'float')
         self.gear = EasyDref('sim/flightmodel/parts/tire_z_no_deflection[0:10]', 'float')
         
         # Gpu
@@ -1312,9 +1321,9 @@ class SceneryObject:
         
         # Return false on error
         if not self.object:
-           print "Can't open file: %s", file
-           self.loaded = False
-           return None
+            print "Can't open file: %s", file
+            self.loaded = False
+            return None
         
         self.loaded = True
         self.__class__.objects.append(self) 
@@ -1448,7 +1457,7 @@ class SceneryObject:
             self.x, self.y, self.z = info[1], info[2],info[3]
             self.theta, self.psi, self.phi = info[4], pos[4], info[5]
         else:
-             self.x, self.y, self.z, self.theta, self.psi, self.phi = tuple(pos)
+            self.x, self.y, self.z, self.theta, self.psi, self.phi = tuple(pos)
     def getPos(self):
         return [self.x, self.y, self.z, self.theta, self.psi, self.phi]
     
