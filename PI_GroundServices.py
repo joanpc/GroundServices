@@ -42,6 +42,8 @@ DEBUG=False
 VERSION='ALPHA-3'
 PRESETS_FILE='WFprofiles.wfp'
 HELP_CAPTION='Profile name: '
+# Far from that range objects will be destroyed
+DESTROY_DISTANCE = 500
 
 # ARBS 4600 l/min
 #RFLOW=1200
@@ -59,7 +61,7 @@ ANIM_RATE=0.04
 #Tug rudder offset
 TUG_OFFSET=4.2
 
-OBJ_PATH = 'Custom Scenery/OpenSceneryX/objects/airport/vehicles/'
+OBJ_PATH = './Custom Scenery/OpenSceneryX/objects/airport/vehicles/'
 
 class Empty:
     # an empty class for assigning values
@@ -377,11 +379,11 @@ class PythonInterface:
     
     def mainCallback(self, elapsedMe, elapsedSim, counter, refcon):
         '''
-        Check each minute if we can earse distant objects
+        Check every minute if we can earse distant objects
         '''
         if len(SceneryObject.objects):
             for object in SceneryObject.objects: 
-                if self.acf.getPointDist(object.getPos()) > 500:
+                if self.acf.getPointDist(object.getPos()) > DESTROY_DISTANCE:
                     object.destroy()
             return 60
         return 0
@@ -750,7 +752,7 @@ class PythonInterface:
         '''
         # do nothing if sim is paused
         if self.paused.value: return 1
-        
+
         # Wait for break release
         if (self.acf.pbrake.value):
             if (not self.pusbackWaitBrakes):
@@ -767,10 +769,10 @@ class PythonInterface:
             self.pushbackTime = elapsedSim
         
         maxSpeed = self.pushbackMaxSpeed
-        gspeed      = self.acf.groundspeed.value
+        gspeed   = self.acf.groundspeed.value
         
         #Overspeed
-        if gspeed > (maxSpeed * 1.5): 
+        if self.conf.tug.autopilot and gspeed > (maxSpeed * 1.5): 
             self.PushBack('Stop', True)
             return 0
         
@@ -778,7 +780,6 @@ class PythonInterface:
         if self.pushbackDir > 0: 
             if abs(c.shortHdg(self.acf.psi.value, self.acf.hpath.value)) < 90: gspeed *= -1
         elif abs(c.shortHdg(self.acf.psi.value, self.acf.hpath.value)) > 90: gspeed *= -1 
-        
         
         if self.pusbackStatus == 'Start':
 
@@ -836,10 +837,8 @@ class PythonInterface:
                 self.acf.yokeHeading.value = (rleft/15)**0.8 * self.pushbackTurnDir
             
         ## Pushback phase change
-        if dist + 0.1 > init:
-            if  not self.conf.tug.autopilot:
-                pass
-            elif  self.pusbackStatus == 'Start':
+        if self.conf.tug.autopilot and dist + 0.1 > init:
+            if  self.pusbackStatus == 'Start':
                 if self.pusbackAngle > 0:
                     self.pusbackStatus = 'Rotate'
                 else: self.PushBack('Stop')
@@ -857,7 +856,7 @@ class PythonInterface:
                 if targetSpeed > gspeed:
                     # Gas curve
                     power *= x**0.5
-                else: 
+                else:
                     # Brakes (aprox maxPower/4)
                     power *= 0.25*x**3
                     if DEBUG and (self.count %30) == 0:print "brake"
@@ -871,8 +870,8 @@ class PythonInterface:
             if DEBUG and (self.count %30) == 0: 
                 stime = c.stime(elapsedSim - self.pushbackTime)
                 print '%s distance: %f/%f, speed: %f, targetSpeed: %f, power: %.0f' % (stime, dist, init, gspeed, targetSpeed, power/self.conf.tpower *100)
-            # Add power to plane
             
+            # Add power to plane
             drag = self.conf.tpower * gspeed/maxSpeed*0.25
             power -= drag
             a = radians(self.acf.psi.value) + 180 % 360
@@ -1323,6 +1322,7 @@ class SceneryObject:
         if not self.object:
             print "Can't open file: %s", file
             self.loaded = False
+            self.enabled = False
             return None
         
         self.loaded = True
@@ -1481,6 +1481,9 @@ class SceneryObject:
         XPLMUnregisterFlightLoopCallback(self.__class__.plugin, self.floop, 0)
         XPLMUnloadObject(self.object)
         self.enabled = False
+        if len(self.__class__.objects) < 1 and self.drawing:
+            self.__class__.drawing = False
+            XPLMUnregisterDrawCallback(self.plugin, self.DrawCB, xplm_Phase_Objects, 0, 0)
         self = False
 
     @classmethod
@@ -1488,8 +1491,9 @@ class SceneryObject:
         for obj in self.objects[:]:
             obj.destroy()
         if self.drawing:
-            XPLMUnregisterDrawCallback(self.plugin, self.DrawCB, xplm_Phase_Objects, 0, 0)
             self.drawing = False
+            XPLMUnregisterDrawCallback(self.plugin, self.DrawCB, xplm_Phase_Objects, 0, 0)
+            
 
 class EasyCommand:
     '''

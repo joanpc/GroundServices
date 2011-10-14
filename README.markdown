@@ -18,7 +18,7 @@ A great way to have some movement around your plane, and do your push-back and r
 
 ## Installation
 
-You need an updated installation of [OpenSceneryX](http://www.opensceneryx.com/) and Sandy Barbour [x-plane python interface](http://www.xpluginsdk.org/python_interface_sdk100_downloads.htm) 
+You need an updated installation of [OpenSceneryX](http://www.opensceneryx.com/) and Sandy Barbour [x-plane python interface](http://www.xpluginsdk.org/python_interface_sdk100_downloads.htm).
 
 ### OpenSceneryX
 
