@@ -61,7 +61,7 @@ ANIM_RATE=0.04
 #Tug rudder offset
 TUG_OFFSET=4.2
 
-OBJ_PATH = './Custom Scenery/OpenSceneryX/objects/airport/vehicles/'
+OBJ_PATH = 'Custom Scenery/OpenSceneryX/objects/airport/vehicles/'
 
 class Empty:
     # an empty class for assigning values
@@ -1320,7 +1320,7 @@ class SceneryObject:
         
         # Return false on error
         if not self.object:
-            print "Can't open file: %s", file
+            print "Can't open file: %s" % file
             self.loaded = False
             self.enabled = False
             return None
