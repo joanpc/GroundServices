@@ -39,7 +39,7 @@ import cPickle
 DEBUG=False
 
 # False constants
-VERSION='ALPHA-3'
+__VERSION__='alpha-4'
 PRESETS_FILE='WFprofiles.wfp'
 HELP_CAPTION='Profile name: '
 # Far from that range objects will be destroyed
@@ -60,6 +60,9 @@ ANIM_RATE=0.04
 
 #Tug rudder offset
 TUG_OFFSET=4.2
+
+# Nose wheel tiller joy axis assignment
+NOSE_WHEEL_TILLER = 37
 
 OBJ_PATH = 'Custom Scenery/OpenSceneryX/objects/airport/vehicles/'
 
@@ -248,7 +251,7 @@ class Config:
         
 class PythonInterface:
     def XPluginStart(self):
-        self.Name = "GroundServices - " + VERSION
+        self.Name = "GroundServices - " + __VERSION__
         self.Sig = "GroundServices.joanpc.PI"
         self.Desc = "X-Plane Ground Services"
         
@@ -390,7 +393,7 @@ class PythonInterface:
     
     def CreatePushBackWindow(self, x, y, w, h):
         x2 = x + w
-        y2 = y - h
+        y2 = y - h -25
         Buffer = "Request PushBack"
         
         # Create the Main Widget window
@@ -398,7 +401,7 @@ class PythonInterface:
         window = self.PusbackWindowWidget
         
         # Create the Sub window
-        subw = XPCreateWidget(x+10, y-30, x2-20 + 10, y2+40, 1, "" ,  0,window, xpWidgetClass_SubWindow)
+        subw = XPCreateWidget(x+10, y-30, x2-20 + 10, y2+40 -25, 1, "" ,  0,window, xpWidgetClass_SubWindow)
         # Set the style to sub window
         XPSetWidgetProperty(subw, xpProperty_SubWindowType, xpSubWindowStyle_SubWindow)
         
@@ -415,10 +418,13 @@ class PythonInterface:
         y -= 30
         
         # Disable rotation if we don't have a joystick
+        rotation_default = 0;
+        rotation_enabled = 0;
+        
         if not self.acf.has_joystic.value:
-            rotation_default = 0;
-            rotation_enabled = 0;
             XPCreateWidget(x, y-40, x+80, y-60, 1, 'Rotation disabled: No joystick', 0, window, xpWidgetClass_Caption)
+        elif not self.acf.hasYaw():
+            XPCreateWidget(x, y-40, x+80, y-60, 1, 'No Rotation: no yaw assigned', 0, window, xpWidgetClass_Caption)
         else:
             rotation_default = 90
             rotation_enabled = 1
@@ -445,6 +451,14 @@ class PythonInterface:
         XPSetWidgetProperty(self.pusbackTow, xpProperty_ButtonBehavior, xpButtonBehaviorCheckBox)
         
         y-= 20
+        
+        # Push back manual mode
+        XPCreateWidget(x+10, y-40, x+130, y-60, 1, 'Drive tug manually', 0, window, xpWidgetClass_Caption)
+        self.pusbackAutopilot = XPCreateWidget(x+120, y-40, x+130, y-60, 1, "", 0, window, xpWidgetClass_Button)
+        XPSetWidgetProperty(self.pusbackAutopilot, xpProperty_ButtonType, xpRadioButton)
+        XPSetWidgetProperty(self.pusbackAutopilot, xpProperty_ButtonBehavior, xpButtonBehaviorCheckBox)
+        
+        y-= 10
         
         # Request Button 
         self.pushbackButton = XPCreateWidget(x+20, y-60, x+140, y-80, 1, "REQUEST", 0, window, xpWidgetClass_Button)
@@ -675,6 +689,13 @@ class PythonInterface:
             else:
                 self.pushbackDir = 1
             
+            # Manual mode
+            autopilot = XPGetWidgetProperty(self.pusbackAutopilot , xpProperty_ButtonState, None)
+            if autopilot:
+                self.conf.tug.autopilot = False
+            else:
+                self.conf.tug.autopilot = True
+            
             # Clear other actions
             objects = [self.fuelTruck, self.stairsC, self.gpuTruck]
             for obj in objects: obj('go')
@@ -684,9 +705,15 @@ class PythonInterface:
         
         elif op == 'Ready':
             if (self.acf.pbrake.value):
-                XPLMSpeakString('%s Push back ready, please release park brakes' % self.tailnum)
+                if self.conf.tug.autopilot:
+                    XPLMSpeakString('%s Push back ready, please release park brakes' % self.tailnum)
+                else:
+                    XPLMSpeakString('Push back ready, please release park brakes, and use the throttle to control the tug gas. Use park brakes to finalize the operation.')
             else:
-                XPLMSpeakString('%s Starting pushback.' % self.tailnum)
+                if self.conf.tug.autopilot:
+                    XPLMSpeakString('%s Starting pushback.' % self.tailnum)
+                else:
+                     XPLMSpeakString('Push back ready, please use the throttle to control the tug gas. Use park brakes to finalize the operation.')
             
             self.pusbackStatus = False
             self.pusbackWaitBrakes = True
@@ -716,6 +743,7 @@ class PythonInterface:
             if self.conf.tug.autopilot:
                 self.acf.headingOverride.value = 1
                 self.acf.artstabOverride.value = 1
+                self.acf.disableNoseWheelTiller()
             else:
                 self.acf.brakeOverride.value = 1
                 self.acf.throttleOverride.value = 1
@@ -742,6 +770,8 @@ class PythonInterface:
             self.acf.throttleOverride.value = 0
             self.acf.headingOverride.value = 0
             self.acf.artstabOverride.value = 0
+            if self.conf.tug.autopilot:
+                self.acf.enableNoseWheelTiller()
             if self.tug:
                 self.tug.animEndCallback = False
                 self.tugTruck('go')
@@ -1164,6 +1194,7 @@ class Aircraft:
         self.throttleOverride   = EasyDref('sim/operation/override/override_throttles', 'int')
         self.headingOverride    = EasyDref('sim/operation/override/override_joystick_heading', 'int')
         self.artstabOverride    = EasyDref('sim/operation/override/override_artstab', 'int')
+        self.joyOverride        = EasyDref('sim/operation/override/override_joystick', 'int')
         
         self.throttle = EasyDref('sim/flightmodel/engine/ENGN_thro[0]', 'float')
         self.throttleUse = EasyDref('sim/flightmodel/engine/ENGN_thro_use[0:8]', 'float')
@@ -1178,7 +1209,6 @@ class Aircraft:
         
         # Gear deflection
         self.yokeHeading = EasyDref('sim/joystick/yolk_heading_ratio', 'float')
-        #self.tire_steer = EasyDref('sim/flightmodel2/gear/tire_steer_actual_deg[0:1]', 'float')
         self.tire_steer_act = EasyDref('sim/flightmodel/parts/tire_steer_act[0:1]', 'float')
         
         
@@ -1204,11 +1234,41 @@ class Aircraft:
         # Door position
         self.doorX = EasyDref('sim/aircraft/view/acf_door_x', 'float')
         self.doorZ = EasyDref('sim/aircraft/view/acf_door_z', 'float')
-   
+        
+        self.nose_steer = EasyDref('sim/cockpit2/controls/nosewheel_steer_on', 'int')
+        
+        # joy assignments
+        self.joyAssignments = EasyDref('sim/joystick/joystick_axis_assignments[0:100]','int')
+        
     def refresh(self):
         # refresh values on acf change
         pass
    
+    def disableNoseWheelTiller(self):
+        '''
+        Disables the nose wheel tiller
+        (non-rotation bug workaround)
+        '''
+        self.assigns = self.joyAssignments.value
+        self.assginsBkp = self.assigns[:]
+        self.noseWheelTiller = False
+        for i in range(100):
+            if self.assigns[i] == NOSE_WHEEL_TILLER:
+                self.assigns[i] = 0
+                self.noseWheelTiller = True
+        self.joyAssignments.value = self.assigns
+       
+    def enableNoseWheelTiller(self):
+        if self.noseWheelTiller and self.assginsBkp:
+            self.joyAssignments.value = self.assginsBkp
+   
+    def hasYaw(self):
+        self.assigns = self.joyAssignments.value
+        for i in range(100):
+            if self.assigns[i] == 3:
+                return True
+        return False
+    
     def getClass(self):
         '''
         Get class by weight
