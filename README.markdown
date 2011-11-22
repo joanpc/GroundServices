@@ -29,7 +29,7 @@ Install or update [OpenSceneryX](http://www.opensceneryx.com/). Some people are 
 Sandy's python interface requires a python installation in your computer, some OS come with python preinstalled.
 
 #### Windows
-window users must install [Python 2.7 32bit](http://www.python.org/ftp/python/2.7.2/python-2.7.2.msi), [Win 64bit](http://www.python.org/ftp/python/2.7.2/python-2.7.2.amd64.msi)
+window users must install [Python 2.7](http://www.python.org/ftp/python/2.7.2/python-2.7.2.msi), **windows 64bit users should also install the 32bit version**
 and then [PythonInterfaceWin27.zip](http://www.xpluginsdk.org/downloads/sdk200/PythonInterfaceWin27.zip)
 
 #### Mac OSX 

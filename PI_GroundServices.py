@@ -838,7 +838,7 @@ class PythonInterface:
             # rotation speed
             rotation    = self.pusbackAngle
             # add rotation speed
-            gspeed      += abs(self.acf.gearDist * abs(self.acf.rotation.value))
+            gspeed      += abs(self.acf.gearDist * self.acf.rotation.value)
             init        = rotation
             dist        = abs(init - c.fullHdg(self.acf.get()[4], (self.pusbackInitPos[4] + rotation) %360))
             
@@ -893,7 +893,7 @@ class PythonInterface:
             else:
                 # Let the user control the throttle
                 power *=  self.acf.throttle.value[0]
-                gspeed = abs(self.acf.gearDist * abs(self.acf.rotation.value)) + self.acf.groundspeed.value
+                gspeed = abs(self.acf.gearDist * self.acf.rotation.value) + self.acf.groundspeed.value
                 pass
 
             # Debug
@@ -923,7 +923,7 @@ class PythonInterface:
         if self.tug:
             # Stick tug to aircraft
             gear = self.acf.getGearcCoord(0)
-            psi  = self.acf.tire_steer_act.value[0]
+            psi = self.acf.yokeHeading.value * self.acf.gearMaxSteer.value
             pos  = self.acf.getPointAtHdg(self.conf.tgearDist, psi, gear)
             self.tug.setPos(pos, True)
             self.tug.psi += psi
@@ -959,12 +959,19 @@ class PythonInterface:
             self.acf.fuelCap.value = 0
         elif op == 'Start':
             data = []
+            total = self.acf.fuelTotal.value
+            ratio = self.acf.tankRatio.value
+            curr = self.acf.fuelTanks.value
             for i in range(self.nFuelTanks):
                 buff = []
                 XPGetWidgetDescriptor(self.reFuelTankInput[i], buff, 256)
-                data.append(self.float(buff[0]) * c.LB2KG)
+                qty = self.float(buff[0]) * c.LB2KG
+                max = total * ratio[i] - curr[i] 
+                if qty > max:
+                    qty = max
+                    XPSetWidgetDescriptor(self.reFuelTankInput[i], "%.0f" % (qty * c.KG2LB))  
+                data.append(qty)
             self.refuel = data
-            
             XPHideWidget(self.ReFuelButton)
             XPShowWidget(self.CancelReFuelButton)
             
@@ -1091,7 +1098,7 @@ class PythonInterface:
         '''
         Controls buses
         '''
-        if not self.bus or not self.tug.enabled:
+        if not self.bus or not self.bus.enabled:
             self.bus = SceneryObject(self, self.conf.obj.bus)
         
         door = self.acf.getDoorCoord(20)
@@ -1193,6 +1200,7 @@ class Aircraft:
         self.brakeOverride      = EasyDref('sim/operation/override/override_gearbrake', 'int')
         self.throttleOverride   = EasyDref('sim/operation/override/override_throttles', 'int')
         self.headingOverride    = EasyDref('sim/operation/override/override_joystick_heading', 'int')
+        self.rollOverride       = EasyDref('sim/operation/override/override_joystick_roll', 'int')
         self.artstabOverride    = EasyDref('sim/operation/override/override_artstab', 'int')
         self.joyOverride        = EasyDref('sim/operation/override/override_joystick', 'int')
         
@@ -1209,6 +1217,8 @@ class Aircraft:
         
         # Gear deflection
         self.yokeHeading = EasyDref('sim/joystick/yolk_heading_ratio', 'float')
+        self.yokeRoll    = EasyDref('sim/joystick/yolk_roll_ratio', 'float')
+        
         self.tire_steer_act = EasyDref('sim/flightmodel/parts/tire_steer_act[0:1]', 'float')
         
         
@@ -1239,6 +1249,7 @@ class Aircraft:
         
         # joy assignments
         self.joyAssignments = EasyDref('sim/joystick/joystick_axis_assignments[0:100]','int')
+        self.gearType = EasyDref('sim/aircraft/parts/acf_gear_type[0:1]', 'int')
         
     def refresh(self):
         # refresh values on acf change
@@ -1263,6 +1274,9 @@ class Aircraft:
             self.joyAssignments.value = self.assginsBkp
    
     def hasYaw(self):
+        '''
+        Check if the yaw is assigned to a joystick axis
+        '''
         self.assigns = self.joyAssignments.value
         for i in range(100):
             if self.assigns[i] == 3:
