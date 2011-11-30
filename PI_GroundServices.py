@@ -1,8 +1,9 @@
 '''
-
 X-Plane Ground Services
 
-Under developement
+Provides ground services with object animations using the OpenSceneryX library.
+A nice plugin to have some movement around your plane, and do your push-back
+and refueling.
 
 Copyright (C) 2011  Joan Perez i Cauhe
 ---
@@ -39,7 +40,7 @@ import cPickle
 DEBUG=False
 
 # False constants
-__VERSION__='alpha-4'
+__VERSION__='alpha-5'
 PRESETS_FILE='WFprofiles.wfp'
 HELP_CAPTION='Profile name: '
 # Far from that range objects will be destroyed
@@ -230,6 +231,7 @@ class Config:
     
         self.tug.autopilot = True
         self.getConfig('A')
+        
     def getConfig(self, acfClass = False):
         '''
         Todo, get config..
@@ -262,7 +264,7 @@ class PythonInterface:
         # Sim pause
         self.paused = EasyDref('sim/time/paused', 'int')
         
-        self.window, self.fuelWindow, self.reFuelWindow, self.pushbackWindow = False, False, False, False
+        self.window, self.fuelWindow, self.reFuelWindow, self.pushbackWindow, self.aboutWindow = [False] * 5
         
         self.Mmenu = self.mainMenuCB
         
@@ -274,6 +276,7 @@ class PythonInterface:
         self.mPushBack  =  XPLMAppendMenuItem(self.mMain, 'Request Pushback', 2, 1)
         self.mPushBack  =  XPLMAppendMenuItem(self.mMain, 'Request Stairs', 3, 1)
         self.mGpu       =  XPLMAppendMenuItem(self.mMain, 'GPU', 4, 1)
+        self.mAbout     =  XPLMAppendMenuItem(self.mMain, 'About', 5, 1)
         
         self.tailnum = ''
         
@@ -338,6 +341,9 @@ class PythonInterface:
         # Reset windows
         if self.pushbackWindow:
             XPDestroyWidget(self, self.PusbackWindowWidget, 1)
+                # Reset windows
+        if self.aboutWindow:
+            XPDestroyWidget(self, self.aboutWindowWidget, 1)
             
         XPLMUnregisterFlightLoopCallback(self, self.RefuelFloopCB, 0)
         XPLMUnregisterFlightLoopCallback(self, self.PushbackCB, 0)
@@ -379,6 +385,13 @@ class PythonInterface:
             self.stairsC('toggle')
         elif menuItem == 4:
             self.gpuTruck('toggle')
+        elif menuItem == 5:
+            if (not self.aboutWindow):
+                self.CreateAboutWindow(221, 640, 200, 165)
+                self.aboutWindow = True
+            elif (not XPIsWidgetVisible(self.aboutWindowWidget)):
+                XPShowWidget(self.aboutWindowWidget)
+            
     
     def mainCallback(self, elapsedMe, elapsedSim, counter, refcon):
         '''
@@ -391,6 +404,83 @@ class PythonInterface:
             return 60
         return 0
     
+    def CreateAboutWindow(self, x, y, w, h):
+        x2 = x + w
+        y2 = y - 40 - 20 * 8
+        Buffer = "Ground Services"
+        
+        # Create the Main Widget window
+        self.aboutWindowWidget = XPCreateWidget(x, y, x2, y2, 1, Buffer, 1,0 , xpWidgetClass_MainWindow)
+        window = self.aboutWindowWidget
+        
+        # Create the Sub window
+        subw = XPCreateWidget(x+10, y-30, x2-20 + 10, y2+40 -25, 1, "" ,  0,window, xpWidgetClass_SubWindow)
+        # Set the style to sub window
+        XPSetWidgetProperty(subw, xpProperty_SubWindowType, xpSubWindowStyle_SubWindow)
+        x += 20
+        y -= 30
+        
+        # Add Close Box decorations to the Main Widget
+        XPSetWidgetProperty(window, xpProperty_MainWindowHasCloseBoxes, 1)
+               
+        from sys import version_info
+        
+        # Get Open Scenery X Version
+        osxlib = open('%s/Custom Scenery/OpenSceneryX/library.txt' % XPLMGetSystemPath())
+        if osxlib:
+            for line in iter(osxlib):
+                if 'Version' in line:
+                    osxversion = line[line.find('v'):]
+                    break
+            if not osxversion:
+                osxversion = 'Not found'
+        else:
+            osxversion = 'Not found'
+        XPlaneVersion, XPLMVersion, HostID = XPLMGetVersions()
+    
+        sysinfo = [
+        'Ground Services: %s' % __VERSION__,
+        '(c) joan perez cauhe 2011',
+        ]
+        for label in sysinfo:
+            y -= 15
+            XPCreateWidget(x, y, x+40, y-20, 1, label, 0, window, xpWidgetClass_Caption)
+        
+        # Visit site 
+        self.aboutVisit = XPCreateWidget(x+20, y-20, x+120, y-60, 1, "Visit site", 0, window, xpWidgetClass_Button)
+        XPSetWidgetProperty(self.aboutVisit, xpProperty_ButtonType, xpPushButton)
+        
+        y -= 40
+        sysinfo = [
+        'System information:',
+        'X-plane: %.2f' % (int(XPlaneVersion)/1000.0),
+        'Python: %i.%i.%i' % (version_info[0], version_info[1], version_info[2]),
+        'OpenSceneryX: %s' % osxversion
+        ]
+        
+        for label in sysinfo:
+            y -= 15
+            XPCreateWidget(x, y, x+40, y-20, 1, label, 0, window, xpWidgetClass_Caption)
+        
+        # Register our widget handler
+        self.aboutWindowHandlerCB = self.aboutWindowHandler
+        XPAddWidgetCallback(self, window, self.aboutWindowHandlerCB)
+    
+    def aboutWindowHandler(self, inMessage, inWidget, inParam1, inParam2):
+        if (inMessage == xpMessage_CloseButtonPushed):
+            if (self.aboutWindow):
+                XPHideWidget(self.aboutWindowWidget)
+            return 1
+
+        # Handle any button pushes
+        if (inMessage == xpMsg_PushButtonPressed):
+
+            if (inParam1 == self.aboutVisit):
+                from webbrowser import open_new
+                open_new('http://forums.x-plane.org/index.php?app=downloads&showfile=14790');
+                return 1
+        return 0
+            
     def CreatePushBackWindow(self, x, y, w, h):
         x2 = x + w
         y2 = y - h -25
@@ -751,9 +841,10 @@ class PythonInterface:
                 print "MANUAL"
             
             # Center yoke
-            self.acf.yokeHeading.value = 0
+            self.acf.yokeHeading.value = 0.0
             
             self.pushbackTime   = 0.0
+            self.mypsi = 0.0
             pass
         elif op == 'Stop':
             XPLMSetFlightLoopCallbackInterval(self, self.PushbackCB, 0, 0, 0)
@@ -893,6 +984,8 @@ class PythonInterface:
             else:
                 # Let the user control the throttle
                 power *=  self.acf.throttle.value[0]
+                # reversers
+                self.pushbackDir = ( 1 - self.acf.reversers.value[0] * 2)
                 gspeed = abs(self.acf.gearDist * self.acf.rotation.value) + self.acf.groundspeed.value
                 pass
 
@@ -908,8 +1001,10 @@ class PythonInterface:
             h = power / (self.acf.m_total.value + self.conf.tweight)* elapsedMe
             
             # substract angular vel
-            av = sin(radians(self.acf.yokeHeading.value * self.acf.gearMaxSteer.value)) /self.acf.gearDist * h
-            yv = cos(radians(self.acf.yokeHeading.value * self.acf.gearMaxSteer.value)) * h
+            #av = sin(radians(self.acf.yokeHeading.value * self.acf.gearMaxSteer.value)) /self.acf.gearDist * h
+            #yv = cos(radians(self.acf.yokeHeading.value * self.acf.gearMaxSteer.value)) * h
+            av = sin(radians(self.mypsi)) /self.acf.gearDist * h
+            yv = cos(radians(self.mypsi)) * h
             
             self.acf.rotation.value -= av * self.pushbackDir
             self.acf.vx.value -= cos(a) * yv * self.pushbackDir
@@ -923,7 +1018,11 @@ class PythonInterface:
         if self.tug:
             # Stick tug to aircraft
             gear = self.acf.getGearcCoord(0)
-            psi = self.acf.yokeHeading.value * self.acf.gearMaxSteer.value
+            ## test slow
+            #psi = self.acf.yokeHeading.value * self.acf.gearMaxSteer.value
+            #self.acf.yokeHeading = self.acf.y
+            self.mypsi +=  ((self.acf.tire_steer_act.value[0] - self.mypsi) * 0.8 * elapsedMe)
+            psi = self.mypsi
             pos  = self.acf.getPointAtHdg(self.conf.tgearDist, psi, gear)
             self.tug.setPos(pos, True)
             self.tug.psi += psi
@@ -995,7 +1094,7 @@ class PythonInterface:
         return val
     
     '''
-        Object animations
+    Object animations
     '''
     
     def fuelTruck(self, op):
@@ -1251,6 +1350,8 @@ class Aircraft:
         self.joyAssignments = EasyDref('sim/joystick/joystick_axis_assignments[0:100]','int')
         self.gearType = EasyDref('sim/aircraft/parts/acf_gear_type[0:1]', 'int')
         
+        self.reversers = EasyDref('sim/cockpit/warnings/annunciators/reverser_on[0:1]', 'int')
+        
     def refresh(self):
         # refresh values on acf change
         pass
@@ -1409,6 +1510,9 @@ class SceneryObject:
             XPLMRegisterDrawCallback(self.__class__.plugin, self.__class__.DrawCB, xplm_Phase_Objects, 0, 0)
             self.__class__.drawing = True
         
+        # Sim pause
+        self.paused = EasyDref('sim/time/paused', 'int')
+        
         # Main floop
         self.floop = self.floopCallback
         XPLMRegisterFlightLoopCallback(self.__class__.plugin, self.floop, 0, 0)
@@ -1464,6 +1568,8 @@ class SceneryObject:
         '''
         Cheap Animation callback
         '''
+        # do nothing if sim is paused
+        if self.paused.value: return 1
         if elapsedMe > ANIM_RATE * 4:
             return ANIM_RATE
         
@@ -1476,7 +1582,8 @@ class SceneryObject:
             
             if self.totHeading != 0 and pos[4] != self.goTo[4]:
                 a = c.shortHdg(pos[4], self.goTo[4])
-                tohd = (a/self.time * elapsedMe)*3
+                #tohd = (a/self.time * elapsedMe)*3
+                tohd = (a * elapsedMe)
                 pos[4] += tohd
                 pos[4] += 360 
                 pos[4] %= 360
