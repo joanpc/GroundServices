@@ -308,6 +308,12 @@ class PythonInterface:
         self.cmd.append(EasyCommand(self, 'pusback_cancel', self.PushBack, ('Stop', True), 'Cancel Push Back')) 
         self.cmd.append(EasyCommand(self, 'refuel_request', self.Refuel, 'Request', 'Request Refuel, toggle window')) 
         self.cmd.append(EasyCommand(self, 'refuel_cancel', self.Refuel, ('Stop', True), 'Cancel Refuel'))
+        self.cmd.append(EasyCommand(self, 'stairs_request', self.stairsC, 'come', 'Request Stairs'))
+        self.cmd.append(EasyCommand(self, 'stairs_cancel', self.stairsC, 'go', 'Stairs recede'))
+        self.cmd.append(EasyCommand(self, 'stairs_toggle', self.stairsC, 'toggle', 'Toggle stairs'))
+        self.cmd.append(EasyCommand(self, 'gpu_request', self.gpuTruck, 'come', 'Request GPU'))
+        self.cmd.append(EasyCommand(self, 'gpu_cancel', self.gpuTruck, 'go', 'Recede GPU'))
+        self.cmd.append(EasyCommand(self, 'gpu_toggle', self.gpuTruck, 'toggle', 'Toggle GPU'))
         
         return self.Name, self.Sig, self.Desc
 
