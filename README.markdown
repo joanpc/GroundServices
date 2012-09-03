@@ -18,7 +18,7 @@ A great way to have some movement around your plane, and do your push-back and r
 
 ## Installation
 
-You need an updated installation of [OpenSceneryX](http://www.opensceneryx.com/) and Sandy Barbour [x-plane python interface](http://www.xpluginsdk.org/python_interface_sdk100_downloads.htm).
+You need an updated installation of [OpenSceneryX](http://www.opensceneryx.com/) and Sandy Barbour [x-plane python interface](http://www.xpluginsdk.org/python_interface_latest_downloads.htm).
 
 ### OpenSceneryX
 
@@ -30,14 +30,14 @@ Sandy's python interface requires a python installation in your computer, some O
 
 #### Windows
 window users must install [Python 2.7](http://www.python.org/ftp/python/2.7.2/python-2.7.2.msi), **windows 64bit users should also install the 32bit version**
-and then [PythonInterfaceWin27.zip](http://www.xpluginsdk.org/downloads/sdk200/PythonInterfaceWin27.zip)
+and then [PythonInterfaceWin27.zip](http://www.xpluginsdk.org/downloads/latest/PythonInterfaceWin27.zip)
 
 #### Mac OSX 
 Osx comes with python preinstalled but with different versions:
 
- * **Leopard** 10.5:       outdated python version, install [Python 2.7.2 Mac OS X 32-bit i386/PPC](http://www.python.org/ftp/python/2.7.2/python-2.7.2-macosx10.3.dmg) and then [PythonInterfaceMac27.zip](http://www.xpluginsdk.org/downloads/sdk200/PythonInterfaceMac27.zip)
- * **Snow Leopard** 10.6:  **python 2.6** preinstalled install [PythonInterfaceMac26.zip](http://www.xpluginsdk.org/downloads/sdk200/PythonInterfaceMac26.zip)
- * **Lion** 10.7:          **python 2.7** preinstalled install [PythonInterfaceMac27.zip](http://www.xpluginsdk.org/downloads/sdk200/PythonInterfaceMac27.zip)
+ * **Leopard** 10.5:       outdated python version, install [Python 2.7.2 Mac OS X 32-bit i386/PPC](http://www.python.org/ftp/python/2.7.2/python-2.7.2-macosx10.3.dmg) and then [PythonInterfaceMac27.zip](http://www.xpluginsdk.org/downloads/latest/PythonInterfaceMac27.zip)
+ * **Snow Leopard** 10.6:  **python 2.6** preinstalled install [PythonInterfaceMac26.zip](http://www.xpluginsdk.org/downloads/latest/PythonInterfaceMac26.zip)
+ * **Lion** 10.7:          **python 2.7** preinstalled install [PythonInterfaceMac27.zip](http://www.xpluginsdk.org/downloads/latest/PythonInterfaceMac27.zip)
 
 ### Linux
 Check for the your version of python:
@@ -45,8 +45,8 @@ Check for the your version of python:
      joanpc:~$ python --version
      Python 2.7.1
 
- * 2.6.x: download [PythonInterfaceLin26.zip](http://www.xpluginsdk.org/downloads/sdk200/PythonInterfaceLin26.zip)
- * 2.7.x: download [PythonInterfaceLin27.zip](http://www.xpluginsdk.org/downloads/sdk200/PythonInterfaceLin27.zip)
+ * 2.6.x: download [PythonInterfaceLin26.zip](http://www.xpluginsdk.org/downloads/latest/PythonInterfaceLin26.zip)
+ * 2.7.x: download [PythonInterfaceLin27.zip](http://www.xpluginsdk.org/downloads/latest/PythonInterfaceLin27.zip)
 
 ### All OSs
 
