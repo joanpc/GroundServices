@@ -40,7 +40,7 @@ import cPickle
 DEBUG=False
 
 # False constants
-__VERSION__='alpha-5'
+__VERSION__='alpha5'
 PRESETS_FILE='WFprofiles.wfp'
 HELP_CAPTION='Profile name: '
 # Far from that range objects will be destroyed
@@ -142,6 +142,7 @@ class c:
     def stime(self, sec):
         # returns formated seconds
         return '%d:%02d:%02d' % ( sec/3600, sec%3600/60, sec%3600%60 )
+
 class Config:
     
     #Avaliable objects
